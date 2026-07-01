@@ -41,20 +41,9 @@ function InvoiceFeeCard({ used }: { used: number }) {
   const pct = Math.min(100, (used / MONTHLY_LIMIT) * 100);
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Notas fiscais (faturamento do mês)
-        </p>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            over50
-              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
-          }`}
-        >
-          contábil {brl(fee)}
-        </span>
-      </div>
+      <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        Notas fiscais (faturamento do mês)
+      </p>
       <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
         {brl(used)}
         <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500"> faturado</span>

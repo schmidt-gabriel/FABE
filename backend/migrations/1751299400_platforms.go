@@ -22,14 +22,7 @@ func init() {
 		if err := app.Save(platforms); err != nil {
 			return err
 		}
-		for _, name := range []string{"Remessa Online", "Deel", "Higlobal", "Wise", "Outro"} {
-			r := core.NewRecord(platforms)
-			r.Set("name", name)
-			r.Set("active", true)
-			if err := app.Save(r); err != nil {
-				return err
-			}
-		}
+		// No seed: platforms come from importing 2026.json.
 
 		// Convert fixed-select platform fields to free text.
 		conv := []struct {

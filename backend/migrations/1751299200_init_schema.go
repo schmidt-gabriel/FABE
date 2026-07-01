@@ -162,7 +162,9 @@ func init() {
 			return err
 		}
 
-		return seedDefaults(app, settings, services, clients)
+		// No seed data: all values (settings, platforms, services, etc.) come
+		// from importing json file.
+		return nil
 	}, func(app core.App) error {
 		// down: drop in reverse dependency order
 		for _, name := range []string{
@@ -179,42 +181,3 @@ func init() {
 	})
 }
 
-func seedDefaults(app core.App, settings, services, clients *core.Collection) error {
-	// settings singleton with standard Lucro Presumido defaults
-	s := core.NewRecord(settings)
-	s.Set("company_name", "")
-	s.Set("cnpj", "")
-	s.Set("irpj_presumption_reduced", 0.16)
-	s.Set("irpj_presumption_standard", 0.32)
-	s.Set("irpj_reduced_annual_limit", 120000.0)
-	s.Set("irpj_rate", 0.15)
-	s.Set("irpj_adicional_rate", 0.10)
-	s.Set("irpj_adicional_threshold", 60000.0)
-	s.Set("csll_presumption", 0.32)
-	s.Set("csll_rate", 0.09)
-	s.Set("inss_monthly", 0.0)
-	if err := app.Save(s); err != nil {
-		return err
-	}
-
-	// recurring services with their due days (Vencimentos)
-	svc := []struct {
-		name string
-		day  int
-	}{
-		{"INTERNET", 10}, {"UNIMED", 10}, {"GOWORK", 14}, {"CONTABILIZEI", 15}, {"DARF INSS", 17},
-	}
-	for _, v := range svc {
-		r := core.NewRecord(services)
-		r.Set("name", v.name)
-		r.Set("exp_day", v.day)
-		if err := app.Save(r); err != nil {
-			return err
-		}
-	}
-
-	// Clients are added by the user in-app (no seed to avoid shipping real names).
-	_ = clients
-
-	return nil
-}

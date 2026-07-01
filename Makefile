@@ -2,7 +2,7 @@
 
 ## Docker (local stack)
 up:            ## start backend + frontend
-	docker compose up --build
+	docker compose up --build -d
 
 down:          ## stop the stack
 	docker compose down

@@ -27,7 +27,7 @@ export default function Login({ onAuth }: { onAuth: () => void }) {
               Finance · CNPJ
             </h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Controle financeiro da empresa. Entre para continuar.
+              Controle financeiro da empresa. <br/> Entre para continuar.
             </p>
           </div>
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { pb } from "../lib/pb";
+import { useCollection } from "../lib/useCollection";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 
 const nav = [
@@ -50,13 +51,22 @@ function ThemeToggle() {
 }
 
 export default function Layout() {
+  // settings is a singleton and has no `created` field, so override the default
+  // sort (-created would 400).
+  const settings = useCollection<{ id: string; cnpj?: string }>("settings", {
+    sort: "-updated",
+  });
+  const cnpj = settings.list.data?.[0]?.cnpj;
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="flex">
         <aside className="sticky top-0 flex h-screen w-56 flex-col border-r border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="px-2 py-3">
             <h1 className="text-lg font-semibold">Finance · CNPJ</h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {cnpj && (
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">{cnpj}</p>
+            )}
+            <p className="text-xs text-neutral-400 dark:text-neutral-500">
               {pb.authStore.record?.email}
             </p>
           </div>

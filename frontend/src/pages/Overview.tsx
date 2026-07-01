@@ -7,6 +7,10 @@ import { pb, brl, usd } from "../lib/pb";
 import { Button, Card, Select } from "../components/ui";
 
 const YEARS = [2026, 2025, 2024, 2023];
+const MONTHS = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
 const MONTHLY_LIMIT = 50000; // R$50k/month for invoices and for profit distribution
 const IRRF_RATE = 0.1; // 10% IRRF alta renda on the full month's distribution above R$50k
 const ANNUAL_REFUND_LIMIT = 600000; // refundable in IRPF if yearly income stays below this
@@ -119,8 +123,17 @@ function annualDistribution(rows: { month: string; amount: number }[] | undefine
 }
 
 export default function Overview() {
+  const now0 = new Date();
   const [year, setYear] = useState(2026);
+  const [month, setMonth] = useState(now0.getMonth()); // 0-11, drives the monthly view
   const navigate = useNavigate();
+
+  // Switching year jumps the month to the current month (current year) or the
+  // last month of that year (past years).
+  function changeYear(y: number) {
+    setYear(y);
+    setMonth(y === now0.getFullYear() ? now0.getMonth() : 11);
+  }
 
   const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
@@ -158,10 +171,12 @@ export default function Overview() {
   const toBring = receivedUsd - importedUsd;
   const rate = fx.data?.rate ?? 0;
 
-  // Monthly operating limits (current calendar month, local time).
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const monthLabel = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  // Monthly view (limits + due dates), driven by the year + month dropdowns.
+  // Don't offer future months: for the current year cap at this month, so the
+  // dropdown only lists months that have already started.
+  const maxMonth = year === now0.getFullYear() ? now0.getMonth() : 11;
+  const selMonth = Math.min(month, maxMonth);
+  const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
   const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
   const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
   const annualDist = annualDistribution(dist.list.data, year);
@@ -170,18 +185,32 @@ export default function Overview() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Visão geral</h1>
-        <div className="w-32">
-          <Select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {YEARS.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </Select>
+        <div className="flex gap-2">
+          <div className="w-36">
+            <Select value={selMonth} onChange={(e) => setMonth(Number(e.target.value))}>
+              {MONTHS.slice(0, maxMonth + 1).map((m, i) => (
+                <option key={i} value={i}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="w-28">
+            <Select value={year} onChange={(e) => changeYear(Number(e.target.value))}>
+              {YEARS.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button variant="ghost" onClick={() => navigate("/remessas?new=1")}>
+          + Remessa
+        </Button>
         <Button variant="ghost" onClick={() => navigate("/importacoes?new=1")}>
           + Nota fiscal
         </Button>
@@ -193,11 +222,11 @@ export default function Overview() {
         </Button>
       </div>
 
-      <Vencimentos />
+      <Vencimentos ym={ym} />
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-neutral-500 dark:text-neutral-400">
-          Limites de {monthLabel}
+          Limites de {MONTHS[selMonth]} de {year}
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <InvoiceFeeCard used={invoiceUsed} />
@@ -286,7 +315,7 @@ export default function Overview() {
   );
 }
 
-function Vencimentos() {
+function Vencimentos({ ym }: { ym: string }) {
   const services = useCollection<{ id: string; name: string; exp_day: number }>(
     "recurring_services",
     { sort: "exp_day" },
@@ -294,8 +323,10 @@ function Vencimentos() {
   const expenses = useCollection<Expense>("expenses", { sort: "-date" });
 
   const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const day = now.getDate();
+  const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // Effective day-of-month for the "atrasado" check: fully elapsed for past
+  // months, not started for future months, today for the current month.
+  const day = ym < currentYm ? 32 : ym > currentYm ? 0 : now.getDate();
   const paidThisMonth = (name: string) =>
     (expenses.list.data ?? []).some(
       (e) => e.category.toUpperCase() === name.toUpperCase() && e.date.slice(0, 7) === ym,

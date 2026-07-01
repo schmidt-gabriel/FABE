@@ -12,10 +12,15 @@ export interface PlatformRecord extends BaseRecord {
   active?: boolean;
 }
 
+export type BillingType = "monthly" | "hourly";
+export type PayFrequency = "monthly" | "weekly";
+
 export interface Client extends BaseRecord {
   name: string;
   default_platform?: Platform;
   monthly_amount?: number;
+  billing_type?: BillingType;
+  pay_frequency?: PayFrequency;
   active?: boolean;
 }
 

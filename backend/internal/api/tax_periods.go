@@ -119,7 +119,7 @@ func enrichYear(app core.App, year int, params tax.Params, now time.Time) ([]qua
 			out[i] = quarterOut{snapshotToResult(rec), "locked", due.Format("2006-01-02")}
 		case rec != nil: // explicitly unlocked -> forecast
 			out[i] = quarterOut{computed[i], "forecast", due.Format("2006-01-02")}
-		case dateOnOrAfter(now, due): // auto-lock past-due
+		case dateOnOrAfter(now, due) && computed[i].Revenue > 0: // auto-lock past-due with data
 			if err := saveSnapshot(app, year, computed[i], true); err != nil {
 				return nil, err
 			}

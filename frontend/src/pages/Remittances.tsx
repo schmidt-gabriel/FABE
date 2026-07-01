@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useCollection, usePlatformNames } from "../lib/useCollection";
 import type { Client, Remittance } from "../lib/types";
 import { usd, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
@@ -17,6 +18,15 @@ export default function Remittances() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Remittance | null>(null);
   const [form, setForm] = useState<Record<string, unknown>>(empty);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      openNew();
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openNew() {
     setEditing(null);

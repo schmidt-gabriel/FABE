@@ -2,11 +2,13 @@ import { useState } from "react";
 import Clients from "./Clients";
 import Platforms from "./Platforms";
 import Export from "./Export";
+import Account from "./Account";
 
 const TABS = [
   { key: "clientes", label: "Clientes" },
   { key: "plataformas", label: "Plataformas" },
   { key: "dados", label: "Dados" },
+  { key: "usuario", label: "Usuário" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -35,6 +37,7 @@ export default function Config() {
       {tab === "clientes" && <Clients />}
       {tab === "plataformas" && <Platforms />}
       {tab === "dados" && <Export />}
+      {tab === "usuario" && <Account />}
     </div>
   );
 }

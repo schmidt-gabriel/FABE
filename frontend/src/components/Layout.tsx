@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { pb } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
@@ -51,6 +51,11 @@ function ThemeToggle() {
 }
 
 export default function Layout() {
+  // Re-render when the auth record changes (e.g. email edited in Config →
+  // Usuário) so the sidebar shows the current email.
+  const [, setAuthTick] = useState(0);
+  useEffect(() => pb.authStore.onChange(() => setAuthTick((t) => t + 1)), []);
+
   // settings is a singleton and has no `created` field, so override the default
   // sort (-created would 400).
   const settings = useCollection<{ id: string; cnpj?: string }>("settings", {

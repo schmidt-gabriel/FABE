@@ -35,8 +35,7 @@ frontend/
                                 # ProfitDistributions, Taxes, Config, Export, Login
   src/lib/                      # pb (client + formatters), useCollection, types, theme
   src/components/               # ui primitives, Layout
-2026.json                       # seed/backup of the 2026 dataset (reimport to reset)
-docker-compose.yml, Makefile
+docker-compose.yml, Makefile      # data backup lives OUTSIDE the repo (see below)
 ```
 
 ## Running
@@ -48,25 +47,32 @@ make frontend    # local: vite dev :5173
 make test        # backend tests (tax, fx)
 ```
 
-Login: create the owner (superuser) in PocketBase admin (`:8090/_/`), then add a
-`users` record with your own email/password.
+Login (single account): on a fresh DB, PocketBase prints a `pbinstall` link on
+startup (replace `0.0.0.0` with `localhost`) to create the first **superuser**.
+That same email/password logs into both the admin (`:8090/_/`) and the app UI
+(`:5173`): the frontend authenticates against `_superusers` directly (see
+`Login.tsx`). There is no separate `users` account. CLI alternative:
+`docker compose exec backend /app/fin superuser upsert EMAIL PASS`.
 
 ### Working with data / resetting
 
-We work against the **2026 dataset**. After tests that mutate data, reload it:
-Config → Dados → Importar backup → Sobrescrever tudo (upload `2026.json`), or:
+Real data (2023-2026) lives outside the repo in
+`/Users/gabriel/Code/Personal/backup.json` (gitignored patterns cover it). After
+tests that mutate data, reload it: Config → Dados → Importar backup →
+Sobrescrever tudo (upload `backup.json`), or:
 
 ```bash
 curl -s -X POST "http://localhost:8090/api/import/backup?mode=overwrite" \
   -H "Authorization: $TOKEN" -H "Content-Type: application/json" \
-  --data-binary @2026.json
+  --data-binary @/Users/gabriel/Code/Personal/backup.json
 ```
 
-Regenerate `2026.json` from the running DB: `GET /api/export/backup` piped to the file.
+Regenerate it from the running DB: `GET /api/export/backup` piped to the file.
 
 ## Collections
 
-`clients` (name, default_platform, monthly_amount, active), `platforms` (name, active),
+`clients` (name, default_platform, monthly_amount, billing_type monthly|hourly,
+pay_frequency monthly|weekly, active), `platforms` (name, active),
 `remittances` (client→, platform, amount_usd, pay_day), `imports` (platform, amount_usd,
 convert_day, rate, amount_brl), `expenses` (date, category, amount, notes),
 `recurring_services` (name, exp_day), `profit_distributions` (month, amount, cota_irrf),
@@ -111,7 +117,7 @@ new platforms can be added in Config.
   real DARFs are the source of truth.
 - After changing collections, add a Go migration under `backend/migrations/` (applied on
   startup). To change a field type, remove + re-add (data in that column is dropped;
-  reimport `2026.json`).
+  reimport `backup.json`).
 - Dates are stored as PocketBase datetimes; the UI works with calendar dates and uses
   **local** time for "current month" logic (not UTC).
 - No em dashes in written output.

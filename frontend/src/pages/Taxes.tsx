@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pb, brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
+import { useYear } from "../lib/year";
 import type { OtherTax } from "../lib/types";
-import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
+import { Button, Card, Field, Input, Modal } from "../components/ui";
 
 type Quarter = {
   quarter: number;
@@ -23,7 +24,6 @@ type TaxResponse = {
   year_total: number;
 };
 
-const YEARS = [2026, 2025, 2024, 2023];
 const QUARTER_MONTHS = ["jan-mar", "abr-jun", "jul-set", "out-dez"];
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -37,7 +37,7 @@ async function authFetch(path: string, init?: RequestInit) {
 }
 
 export default function Taxes() {
-  const [year, setYear] = useState(2026);
+  const { year } = useYear(); // global, selected in the sidebar
   const qc = useQueryClient();
 
   const { data, isLoading, error } = useQuery<TaxResponse>({
@@ -114,16 +114,7 @@ export default function Taxes() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Impostos</h1>
-        <div className="w-32">
-          <Select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {YEARS.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <h1 className="text-2xl font-semibold">Impostos · {year}</h1>
       </div>
 
       {isLoading && <p className="text-neutral-500 dark:text-neutral-400">Calculando…</p>}

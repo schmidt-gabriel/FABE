@@ -11,7 +11,9 @@ export default function Login({ onAuth }: { onAuth: () => void }) {
     e.preventDefault();
     setError("");
     try {
-      await pb.collection("users").authWithPassword(email, password);
+      // Single-user app: the PocketBase superuser (created on first run at
+      // :8090/_/) is also the app login.
+      await pb.collection("_superusers").authWithPassword(email, password);
       onAuth();
     } catch {
       setError("Credenciais inválidas");
@@ -27,7 +29,7 @@ export default function Login({ onAuth }: { onAuth: () => void }) {
               Finance · CNPJ
             </h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              Controle financeiro da empresa. <br/> Entre para continuar.
+              Controle financeiro da empresa. <br /> Entre para continuar.
             </p>
           </div>
 

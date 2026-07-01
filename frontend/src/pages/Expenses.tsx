@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
+import { useYear } from "../lib/year";
 import type { Expense } from "../lib/types";
 import { EXPENSE_CATEGORIES } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
@@ -16,12 +17,19 @@ export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
     sort: "-date",
   });
+  const { year } = useYear();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
   const [filter, setFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState(currentMonth);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // When the sidebar year changes, default to the current month (current year)
+  // or the whole year (past years).
+  useEffect(() => {
+    setMonthFilter(year === new Date().getFullYear() ? currentMonth() : "");
+  }, [year]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
@@ -59,14 +67,20 @@ export default function Expenses() {
     setOpen(false);
   }
 
-  const months = [...new Set([currentMonth(), ...(list.data ?? []).map((x) => x.date.slice(0, 7))])]
+  const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
+  const months = [
+    ...new Set([
+      ...(year === new Date().getFullYear() ? [currentMonth()] : []),
+      ...inYear.map((x) => x.date.slice(0, 7)),
+    ]),
+  ]
     .sort()
     .reverse();
   const fmtMonth = (ym: string) => {
     const [y, m] = ym.split("-");
     return `${m}/${y}`;
   };
-  const rows = (list.data ?? []).filter(
+  const rows = inYear.filter(
     (x) =>
       (!filter || x.category === filter) && (!monthFilter || x.date.slice(0, 7) === monthFilter),
   );
@@ -75,7 +89,7 @@ export default function Expenses() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Despesas</h1>
+        <h1 className="text-2xl font-semibold">Despesas · {year}</h1>
         <div className="flex items-center gap-2">
           <div className="w-36">
             <Select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>

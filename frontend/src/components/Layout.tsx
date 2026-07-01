@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { pb } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
+import { useYear, yearOptions } from "../lib/year";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 
 const nav = [
@@ -51,6 +52,8 @@ function ThemeToggle() {
 }
 
 export default function Layout() {
+  const { year, setYear } = useYear();
+
   // Re-render when the auth record changes (e.g. email edited in Config →
   // Usuário) so the sidebar shows the current email.
   const [, setAuthTick] = useState(0);
@@ -74,6 +77,22 @@ export default function Layout() {
             <p className="text-xs text-neutral-400 dark:text-neutral-500">
               {pb.authStore.record?.email}
             </p>
+          </div>
+          <div className="px-2 pb-1">
+            <label className="mb-1 block text-xs font-medium text-neutral-400 dark:text-neutral-500">
+              Ano
+            </label>
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+            >
+              {yearOptions().map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
           </div>
           <nav className="mt-2 flex-1 space-y-1">
             {nav.map((item) => (

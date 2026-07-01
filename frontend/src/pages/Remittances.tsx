@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection, usePlatformNames } from "../lib/useCollection";
+import { useYear } from "../lib/year";
 import type { Client, Remittance } from "../lib/types";
 import { usd, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
@@ -56,12 +57,14 @@ export default function Remittances() {
     setOpen(false);
   }
 
-  const total = list.data?.reduce((s, r) => s + r.amount_usd, 0) ?? 0;
+  const { year } = useYear();
+  const rows = (list.data ?? []).filter((r) => r.pay_day.slice(0, 4) === String(year));
+  const total = rows.reduce((s, r) => s + r.amount_usd, 0);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Remessas</h1>
+        <h1 className="text-2xl font-semibold">Remessas · {year}</h1>
         <Button onClick={openNew}>+ Adicionar</Button>
       </div>
 
@@ -77,7 +80,7 @@ export default function Remittances() {
             </tr>
           </thead>
           <tbody>
-            {list.data?.map((r) => (
+            {rows.map((r) => (
               <tr key={r.id} className="border-t border-neutral-100 dark:border-neutral-800">
                 <td className="px-4 py-3">{fmtDate(r.pay_day)}</td>
                 <td className="px-4 py-3 font-medium">{r.expand?.client?.name ?? "—"}</td>
@@ -93,10 +96,10 @@ export default function Remittances() {
                 </td>
               </tr>
             ))}
-            {list.data?.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma remessa registrada.
+                  Nenhuma remessa registrada em {year}.
                 </td>
               </tr>
             )}

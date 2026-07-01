@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
+import { useYear } from "../lib/year";
 import type { Expense, ImportRecord, ProfitDistribution, Remittance } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card, Select } from "../components/ui";
 
-const YEARS = [2026, 2025, 2024, 2023];
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -124,16 +124,16 @@ function annualDistribution(rows: { month: string; amount: number }[] | undefine
 
 export default function Overview() {
   const now0 = new Date();
-  const [year, setYear] = useState(2026);
+  const { year } = useYear(); // global, selected in the sidebar
   const [month, setMonth] = useState(now0.getMonth()); // 0-11, drives the monthly view
   const navigate = useNavigate();
 
   // Switching year jumps the month to the current month (current year) or the
   // last month of that year (past years).
-  function changeYear(y: number) {
-    setYear(y);
-    setMonth(y === now0.getFullYear() ? now0.getMonth() : 11);
-  }
+  useEffect(() => {
+    setMonth(year === now0.getFullYear() ? now0.getMonth() : 11);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year]);
 
   const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
@@ -185,25 +185,14 @@ export default function Overview() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Visão geral</h1>
-        <div className="flex gap-2">
-          <div className="w-36">
-            <Select value={selMonth} onChange={(e) => setMonth(Number(e.target.value))}>
-              {MONTHS.slice(0, maxMonth + 1).map((m, i) => (
-                <option key={i} value={i}>
-                  {m}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="w-28">
-            <Select value={year} onChange={(e) => changeYear(Number(e.target.value))}>
-              {YEARS.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </Select>
-          </div>
+        <div className="w-36">
+          <Select value={selMonth} onChange={(e) => setMonth(Number(e.target.value))}>
+            {MONTHS.slice(0, maxMonth + 1).map((m, i) => (
+              <option key={i} value={i}>
+                {m}
+              </option>
+            ))}
+          </Select>
         </div>
       </div>
 

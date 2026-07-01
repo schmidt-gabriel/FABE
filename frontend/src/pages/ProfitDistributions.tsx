@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
+import { useYear } from "../lib/year";
 import type { ProfitDistribution } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal } from "../components/ui";
@@ -55,9 +56,12 @@ export default function ProfitDistributions() {
     setOpen(false);
   }
 
-  // Annual totals per year, for the R$600k quota.
+  const { year } = useYear();
+  const rows = (list.data ?? []).filter((d) => yearOf(d.month) === String(year));
+
+  // Annual total of the selected year, for the R$600k quota.
   const byYear: Record<string, number> = {};
-  (list.data ?? []).forEach((d) => {
+  rows.forEach((d) => {
     const y = yearOf(d.month);
     byYear[y] = (byYear[y] ?? 0) + d.amount;
   });
@@ -65,7 +69,7 @@ export default function ProfitDistributions() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Distribuição de Lucros</h1>
+        <h1 className="text-2xl font-semibold">Distribuição de Lucros · {year}</h1>
         <Button onClick={openNew}>+ Adicionar</Button>
       </div>
 
@@ -123,7 +127,7 @@ export default function ProfitDistributions() {
             </tr>
           </thead>
           <tbody>
-            {list.data?.map((d) => {
+            {rows.map((d) => {
               const applies = Number(yearOf(d.month)) >= IRRF_START_YEAR;
               const cota = MONTHLY_LIMIT - d.amount;
               const negative = applies && cota < 0;
@@ -151,10 +155,10 @@ export default function ProfitDistributions() {
                 </tr>
               );
             })}
-            {list.data?.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma distribuição registrada.
+                  Nenhuma distribuição registrada em {year}.
                 </td>
               </tr>
             )}

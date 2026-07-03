@@ -8,6 +8,29 @@ import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = { client: "", platform: "", amount_usd: "", pay_day: "", notes: "" };
 
+// Local date (not UTC) for the date input, per the app's calendar-date convention.
+function todayInput(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Default remittance value from the client's reference amount, assuming
+// 40h/week and 4 weeks/month:
+//   monthly billing + monthly pay = reference * 1
+//   monthly billing + weekly pay  = reference / 4
+//   hourly billing  + weekly pay  = reference * 40
+//   hourly billing  + monthly pay = reference * 160
+function defaultAmount(c: Client): string {
+  if (!c.monthly_amount) return "";
+  const weekly = c.pay_frequency === "weekly";
+  if (c.billing_type === "hourly") {
+    return String(c.monthly_amount * (weekly ? 40 : 160));
+  }
+  return String(weekly ? c.monthly_amount / 4 : c.monthly_amount);
+}
+
 export default function Remittances() {
   const { list, create, update, remove } = useCollection<Remittance>("remittances", {
     sort: "pay_day",
@@ -37,7 +60,7 @@ export default function Remittances() {
 
   function openNew() {
     setEditing(null);
-    setForm(empty);
+    setForm({ ...empty, pay_day: todayInput() });
     setOpen(true);
   }
   function openEdit(r: Remittance) {
@@ -138,9 +161,9 @@ export default function Remittances() {
                     ...form,
                     client: e.target.value,
                     platform: c?.default_platform ?? form.platform,
-                    // pre-fill with the client's standard monthly amount; stays
-                    // editable for differences (e.g. vacation).
-                    amount_usd: c?.monthly_amount ? String(c.monthly_amount) : form.amount_usd,
+                    // pre-fill with the computed default; stays editable for
+                    // differences (e.g. vacation).
+                    amount_usd: c ? defaultAmount(c) || form.amount_usd : form.amount_usd,
                   });
                 }}
               >

@@ -21,6 +21,12 @@ export default function Remittances() {
   const [form, setForm] = useState<Record<string, unknown>>(empty);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Active clients only, but keep the selected one visible when editing a
+  // remittance whose client has since been deactivated.
+  const clientOptions = (clients.list.data ?? []).filter(
+    (c) => c.active !== false || c.id === form.client,
+  );
+
   useEffect(() => {
     if (searchParams.get("new") === "1") {
       openNew();
@@ -139,7 +145,7 @@ export default function Remittances() {
                 }}
               >
                 <option value="">Selecione…</option>
-                {clients.list.data?.map((c) => (
+                {clientOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

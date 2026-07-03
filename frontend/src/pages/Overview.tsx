@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { useYear } from "../lib/year";
-import type { Expense, ImportRecord, ProfitDistribution, Remittance } from "../lib/types";
+import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, Remittance } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
-import { Button, Card, Select } from "../components/ui";
+import { Button, Card } from "../components/ui";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -126,6 +126,22 @@ export default function Overview() {
   const now0 = new Date();
   const { year } = useYear(); // global, selected in the sidebar
   const [month, setMonth] = useState(now0.getMonth()); // 0-11, drives the monthly view
+  const [showYearSummary, setShowYearSummary] = useState(
+    () => localStorage.getItem("overview-year-summary") !== "0",
+  );
+  const toggleYearSummary = () =>
+    setShowYearSummary((v) => {
+      localStorage.setItem("overview-year-summary", v ? "0" : "1");
+      return !v;
+    });
+  const [showMonthSection, setShowMonthSection] = useState(
+    () => localStorage.getItem("overview-month-section") !== "0",
+  );
+  const toggleMonthSection = () =>
+    setShowMonthSection((v) => {
+      localStorage.setItem("overview-month-section", v ? "0" : "1");
+      return !v;
+    });
   const navigate = useNavigate();
 
   // Switching year jumps the month to the current month (current year) or the
@@ -183,18 +199,7 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Visão geral</h1>
-        <div className="w-36">
-          <Select value={selMonth} onChange={(e) => setMonth(Number(e.target.value))}>
-            {MONTHS.slice(0, maxMonth + 1).map((m, i) => (
-              <option key={i} value={i}>
-                {m}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
+      <h1 className="text-2xl font-semibold">Visão geral</h1>
 
       <div className="flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => navigate("/remessas?new=1")}>
@@ -211,21 +216,74 @@ export default function Overview() {
         </Button>
       </div>
 
-      <Vencimentos ym={ym} />
-
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-neutral-500 dark:text-neutral-400">
-          Limites de {MONTHS[selMonth]} de {year}
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <InvoiceFeeCard used={invoiceUsed} />
-          <DistributionMonthCard
-            used={distUsed}
-            applyIrrf={Number(ym.slice(0, 4)) >= IRRF_START_YEAR}
-          />
-        </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={toggleMonthSection}
+          className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+          aria-expanded={showMonthSection}
+        >
+          <svg
+            className={`h-3.5 w-3.5 transition-transform ${showMonthSection ? "rotate-90" : ""}`}
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M6 4l4 4-4 4V4z" />
+          </svg>
+          Mês de
+        </button>
+        {/* Months listed newest-first so the current month is always on top. */}
+        <select
+          value={selMonth}
+          onChange={(e) => setMonth(Number(e.target.value))}
+          className="cursor-pointer appearance-none rounded-full border border-neutral-200 bg-white px-3 py-1 text-center text-sm font-semibold text-neutral-700 outline-none transition-colors [text-align-last:center] hover:border-neutral-300 hover:text-neutral-900 focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-neutral-100"
+          aria-label="Mês"
+        >
+          {MONTHS.slice(0, maxMonth + 1)
+            .map((m, i) => (
+              <option key={i} value={i}>
+                {m}
+              </option>
+            ))
+            .reverse()}
+        </select>
       </div>
 
+      {showMonthSection && (
+      <>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Vencimentos ym={ym} />
+        <Receivables ym={ym} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <InvoiceFeeCard used={invoiceUsed} />
+        <DistributionMonthCard
+          used={distUsed}
+          applyIrrf={Number(ym.slice(0, 4)) >= IRRF_START_YEAR}
+        />
+      </div>
+      </>
+      )}
+
+      <button
+        onClick={toggleYearSummary}
+        className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+        aria-expanded={showYearSummary}
+      >
+        <svg
+          className={`h-3.5 w-3.5 transition-transform ${showYearSummary ? "rotate-90" : ""}`}
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M6 4l4 4-4 4V4z" />
+        </svg>
+        Resumo de {year}
+      </button>
+
+      {showYearSummary && (
+      <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Stat
           label="Bruto (importado)"
@@ -300,6 +358,9 @@ export default function Overview() {
           hint={`${usd(importedUsd)} já importados`}
         />
       </div>
+      </>
+      )}
+
     </div>
   );
 }
@@ -310,6 +371,7 @@ function Vencimentos({ ym }: { ym: string }) {
     { sort: "exp_day" },
   );
   const expenses = useCollection<Expense>("expenses", { sort: "-date" });
+  const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
 
   const now = new Date();
   const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -321,36 +383,179 @@ function Vencimentos({ ym }: { ym: string }) {
       (e) => e.category.toUpperCase() === name.toUpperCase() && e.date.slice(0, 7) === ym,
     );
 
+  // IRPF/INSS DARFs due in the selected month come from other_taxes, which
+  // carries its own paid flag and amount.
+  const monthTaxes = (taxes.list.data ?? []).filter(
+    (t) => t.due_date.slice(0, 7) === ym && /irpf|inss/i.test(t.name),
+  );
+
+  const items = [
+    ...(services.list.data ?? []).map((s) => ({
+      key: s.id,
+      name: s.name,
+      day: s.exp_day,
+      amount: 0,
+      paid: paidThisMonth(s.name),
+    })),
+    ...monthTaxes.map((t) => ({
+      key: t.id,
+      name: t.name,
+      day: Number(t.due_date.slice(8, 10)),
+      amount: t.amount,
+      paid: !!t.paid,
+    })),
+  ];
+
+  // Nearest due date first: overdue on top (most urgent), then upcoming by
+  // days left, paid ones at the end.
+  const sortKey = (it: { day: number; paid: boolean }) => {
+    if (it.paid) return 1000 + it.day;
+    if (day > it.day) return -100 + it.day;
+    return it.day - day;
+  };
+  items.sort((a, b) => sortKey(a) - sortKey(b));
+
+  const status = (it: { day: number; paid: boolean }) => {
+    if (it.paid) return { text: "pago", cls: "text-emerald-600 dark:text-emerald-400" };
+    if (ym > currentYm)
+      return { text: `dia ${it.day}`, cls: "text-neutral-500 dark:text-neutral-400" };
+    if (day > it.day)
+      return {
+        text: `atrasado · venceu dia ${it.day}`,
+        cls: "font-medium text-red-600 dark:text-red-400",
+      };
+    const left = it.day - day;
+    const text =
+      left === 0 ? "vence hoje" : left === 1 ? "vence amanhã" : `faltam ${left} dias · dia ${it.day}`;
+    return {
+      text,
+      cls:
+        left < 5
+          ? "font-medium text-amber-600 dark:text-amber-400"
+          : "text-neutral-500 dark:text-neutral-400",
+    };
+  };
+
   return (
     <Card className="overflow-hidden">
-      <div className="border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
+      <div className="border-b border-neutral-100 px-4 py-2.5 dark:border-neutral-800">
         <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
           Vencimentos recorrentes
         </h2>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-neutral-100 sm:grid-cols-3 lg:grid-cols-5 dark:bg-neutral-800">
-        {services.list.data?.map((s) => {
-          const paid = paidThisMonth(s.name);
-          const overdue = !paid && day > s.exp_day;
+      <div className="grid grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
+        {items.map((it) => {
+          const st = status(it);
+          const overdue = !it.paid && ym <= currentYm && day > it.day;
           return (
             <div
-              key={s.id}
-              className={`px-5 py-4 ${
+              key={it.key}
+              className={`flex items-center justify-between gap-3 px-4 py-2 ${
                 overdue ? "bg-red-50 dark:bg-red-950/30" : "bg-white dark:bg-neutral-900"
               }`}
             >
-              <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{s.name}</p>
-              <p
-                className={`text-xs ${
-                  overdue
-                    ? "font-medium text-red-600 dark:text-red-400"
-                    : paid
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-neutral-500 dark:text-neutral-400"
-                }`}
-              >
-                {overdue ? `atrasado · venceu dia ${s.exp_day}` : paid ? "pago" : `dia ${s.exp_day}`}
+              <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                {it.name}
+                {it.amount > 0 && (
+                  <span className="ml-1.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">
+                    {brl(it.amount)}
+                  </span>
+                )}
               </p>
+              <p className={`shrink-0 text-xs ${st.cls}`}>{st.text}</p>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// Monthly reference per client, mirroring Clients.tsx: hourly clients store the
+// hourly rate in monthly_amount, converted at 160h/month.
+const HOURS_PER_MONTH = 160;
+const monthlyReference = (c: Client) =>
+  !c.monthly_amount ? 0 : c.billing_type === "hourly" ? c.monthly_amount * HOURS_PER_MONTH : c.monthly_amount;
+
+function Receivables({ ym }: { ym: string }) {
+  const clients = useCollection<Client>("clients", { sort: "name" });
+  const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
+  const rems = remittances.list.data ?? [];
+
+  const now = new Date();
+  const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  // The contract window is inferred from the remittance history: a client
+  // counts in a month if it lies between their first and last remittance
+  // months (extended to today while the client is active). This keeps
+  // past-month views true to who was actually under contract back then.
+  const inContract = (c: Client) => {
+    const months = rems.filter((r) => r.client === c.id).map((r) => r.pay_day.slice(0, 7));
+    if (!months.length) return c.active !== false && ym >= currentYm;
+    const first = months.reduce((a, b) => (a < b ? a : b));
+    const last = months.reduce((a, b) => (a > b ? a : b));
+    const end = c.active !== false && currentYm > last ? currentYm : last;
+    return ym >= first && ym <= end;
+  };
+
+  const rows = (clients.list.data ?? [])
+    .filter((c) => monthlyReference(c) > 0 && inContract(c))
+    .map((c) => {
+      const expected = monthlyReference(c);
+      const received = rems
+        .filter((r) => r.client === c.id && r.pay_day.slice(0, 7) === ym)
+        .reduce((s, r) => s + r.amount_usd, 0);
+      return { c, expected, received, remaining: Math.max(0, expected - received) };
+    });
+
+  if (!rows.length) return null;
+
+  return (
+    <Card className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-neutral-100 px-4 py-2.5 dark:border-neutral-800">
+        <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+          A receber no mês
+        </h2>
+      </div>
+      <div className="grid flex-1 auto-rows-fr grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
+        {rows.map(({ c, expected, received, remaining }) => {
+          const done = remaining <= 0;
+          // Past months are settled (holidays, fewer hours), so the shortfall
+          // is just informative: neutral difference instead of an amber alert.
+          const past = ym < currentYm;
+          const pct = Math.min(100, (received / expected) * 100);
+          return (
+            <div
+              key={c.id}
+              className="flex flex-col justify-center bg-white px-4 py-2 dark:bg-neutral-900"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                  {c.name}
+                  <span className="ml-1.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">
+                    {usd(received)} de {usd(expected)}
+                  </span>
+                </p>
+                <p
+                  className={`shrink-0 text-xs ${
+                    done
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : past
+                        ? "text-neutral-500 dark:text-neutral-400"
+                        : "font-medium text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {done ? "completo" : past ? `−${usd(remaining)}` : `falta ${usd(remaining)}`}
+                </p>
+              </div>
+              <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                <div
+                  className={`h-full ${
+                    done ? "bg-emerald-500" : past ? "bg-neutral-300 dark:bg-neutral-600" : "bg-amber-500"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </div>
           );
         })}

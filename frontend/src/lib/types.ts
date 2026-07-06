@@ -56,6 +56,12 @@ export interface ProfitDistribution extends BaseRecord {
   notes?: string;
 }
 
+export interface RecurringService extends BaseRecord {
+  name: string;
+  exp_day: number;
+  default_amount?: number;
+}
+
 export interface OtherTax extends BaseRecord {
   name: string;
   reference?: string;

@@ -85,6 +85,7 @@ export default function Layout() {
               {pb.authStore.record?.email}
             </p>
           </div>
+          <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
           <div className="px-2 pb-1">
             <label className="mb-1 block text-xs font-medium text-neutral-400 dark:text-neutral-500">
               Ano
@@ -121,7 +122,8 @@ export default function Layout() {
                 .reverse()}
             </select>
           </div>
-          <nav className="mt-2 flex-1 space-y-1">
+          <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
+          <nav className="flex-1 space-y-1">
             {navMonthly.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
                 {item.label}

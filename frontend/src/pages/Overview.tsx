@@ -217,12 +217,9 @@ export default function Overview() {
           >
             <path d="M6 4l4 4-4 4V4z" />
           </svg>
-          Mês de
+          {/* Month comes from the sidebar selector; shown here for context. */}
+          Mês de {MONTHS[selMonth]}
         </button>
-        {/* Month comes from the sidebar selector; shown here for context. */}
-        <span className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm font-semibold text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
-          {MONTHS[selMonth]}
-        </span>
       </div>
 
       {showMonthSection && (
@@ -260,7 +257,7 @@ export default function Overview() {
 
       {showYearSummary && (
       <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Bruto (importado)"
           value={brl(bruto)}

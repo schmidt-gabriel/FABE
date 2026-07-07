@@ -266,8 +266,11 @@ export default function Overview() {
           value={brl(bruto)}
           hint={`${usd(importedUsd)} convertidos de ${usd(receivedUsd)} recebidos`}
         />
-        <Stat label="Despesas" value={brl(despesas)} />
-        <Stat label="Líquido (bruto − despesas)" value={brl(liquido)} />
+        <Stat
+          label="Líquido (bruto − despesas)"
+          value={brl(liquido)}
+          hint={`Despesas: ${brl(despesas)}`}
+        />
         <Stat
           label="Valor a trazer"
           value={usd(toBring)}

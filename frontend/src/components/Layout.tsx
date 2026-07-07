@@ -5,11 +5,14 @@ import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear, yearOptions } from "../lib/year";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 
-const nav = [
+// Pages driven by the sidebar month filter, separated from the annual ones.
+const navMonthly = [
   { to: "/", label: "Visão geral", end: true },
   { to: "/remessas", label: "Remessas" },
   { to: "/importacoes", label: "Notas Fiscais" },
   { to: "/despesas", label: "Despesas" },
+];
+const navAnnual = [
   { to: "/lucros", label: "Distribuição de Lucros" },
   { to: "/impostos", label: "Impostos" },
 ];
@@ -119,8 +122,14 @@ export default function Layout() {
             </select>
           </div>
           <nav className="mt-2 flex-1 space-y-1">
-            {nav.map((item) => (
+            {navMonthly.map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
+                {item.label}
+              </NavLink>
+            ))}
+            <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
+            {navAnnual.map((item) => (
+              <NavLink key={item.to} to={item.to} className={linkClass}>
                 {item.label}
               </NavLink>
             ))}

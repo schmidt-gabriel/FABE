@@ -1,17 +1,12 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection, usePlatformNames } from "../lib/useCollection";
-import { useYear } from "../lib/year";
+import { MONTHS, useYear } from "../lib/year";
 import type { Client, Remittance } from "../lib/types";
 import { usd, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = { client: "", platform: "", amount_usd: "", pay_day: "", notes: "" };
-
-const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 // Local date (not UTC) for the date input, per the app's calendar-date convention.
 function todayInput(): string {
@@ -91,22 +86,10 @@ export default function Remittances() {
     setOpen(false);
   }
 
-  const { year } = useYear();
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
-  // "" = all months, "01".."12"; defaults to the current month.
-  const [month, setMonth] = useState(currentMonth);
-  // In the current year there is nothing to see in future months.
-  const visibleMonths = year === currentYear ? MONTHS.slice(0, now.getMonth() + 1) : MONTHS;
-  useEffect(() => {
-    if (year === currentYear && month > currentMonth) setMonth(currentMonth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year]);
+  // Year + month come from the sidebar selectors.
+  const { year, month } = useYear();
   const rows = (list.data ?? []).filter(
-    (r) =>
-      r.pay_day.slice(0, 4) === String(year) &&
-      (month === "" || r.pay_day.slice(5, 7) === month),
+    (r) => r.pay_day.slice(0, 4) === String(year) && r.pay_day.slice(5, 7) === month,
   );
   const total = rows.reduce((s, r) => s + r.amount_usd, 0);
 
@@ -114,26 +97,7 @@ export default function Remittances() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Remessas · {year}</h1>
-        <div className="flex items-center gap-2">
-          {/* Same pill dropdown as the Overview: months newest-first so the
-              current month is always on top. */}
-          <select
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="cursor-pointer appearance-none rounded-full border border-neutral-200 bg-white px-3 py-1 text-center text-sm font-semibold text-neutral-700 outline-none transition-colors [text-align-last:center] hover:border-neutral-300 hover:text-neutral-900 focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-neutral-100"
-            aria-label="Mês"
-          >
-            {visibleMonths
-              .map((name, i) => (
-                <option key={name} value={String(i + 1).padStart(2, "0")}>
-                  {name}
-                </option>
-              ))
-              .reverse()}
-            <option value="">Todos os meses</option>
-          </select>
-          <Button onClick={openNew}>+ Adicionar</Button>
-        </div>
+        <Button onClick={openNew}>+ Adicionar</Button>
       </div>
 
       <Card className="overflow-hidden">
@@ -167,8 +131,7 @@ export default function Remittances() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma remessa registrada em{" "}
-                  {month ? `${MONTHS[Number(month) - 1]} de ${year}` : year}.
+                  Nenhuma remessa registrada em {MONTHS[Number(month) - 1]} de {year}.
                 </td>
               </tr>
             )}

@@ -1,16 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
-import { useYear } from "../lib/year";
+import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, Remittance } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card } from "../components/ui";
-
-const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 const MONTHLY_LIMIT = 50000; // R$50k/month for invoices and for profit distribution
 const IRRF_RATE = 0.1; // 10% IRRF alta renda on the full month's distribution above R$50k
 const ANNUAL_REFUND_LIMIT = 600000; // refundable in IRPF if yearly income stays below this
@@ -124,8 +119,7 @@ function annualDistribution(rows: { month: string; amount: number }[] | undefine
 
 export default function Overview() {
   const now0 = new Date();
-  const { year } = useYear(); // global, selected in the sidebar
-  const [month, setMonth] = useState(now0.getMonth()); // 0-11, drives the monthly view
+  const { year, month } = useYear(); // global, selected in the sidebar
   const [showYearSummary, setShowYearSummary] = useState(
     () => localStorage.getItem("overview-year-summary") !== "0",
   );
@@ -143,13 +137,6 @@ export default function Overview() {
       return !v;
     });
   const navigate = useNavigate();
-
-  // Switching year jumps the month to the current month (current year) or the
-  // last month of that year (past years).
-  useEffect(() => {
-    setMonth(year === now0.getFullYear() ? now0.getMonth() : 11);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year]);
 
   const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
@@ -187,11 +174,11 @@ export default function Overview() {
   const toBring = receivedUsd - importedUsd;
   const rate = fx.data?.rate ?? 0;
 
-  // Monthly view (limits + due dates), driven by the year + month dropdowns.
-  // Don't offer future months: for the current year cap at this month, so the
-  // dropdown only lists months that have already started.
+  // Monthly view (limits + due dates), driven by the sidebar year + month.
+  // A month past the latest available one (this month, or December for past
+  // years) is clamped down to it.
   const maxMonth = year === now0.getFullYear() ? now0.getMonth() : 11;
-  const selMonth = Math.min(month, maxMonth);
+  const selMonth = Math.min(Number(month) - 1, maxMonth);
   const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
   const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
   const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
@@ -232,21 +219,10 @@ export default function Overview() {
           </svg>
           Mês de
         </button>
-        {/* Months listed newest-first so the current month is always on top. */}
-        <select
-          value={selMonth}
-          onChange={(e) => setMonth(Number(e.target.value))}
-          className="cursor-pointer appearance-none rounded-full border border-neutral-200 bg-white px-3 py-1 text-center text-sm font-semibold text-neutral-700 outline-none transition-colors [text-align-last:center] hover:border-neutral-300 hover:text-neutral-900 focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-neutral-100"
-          aria-label="Mês"
-        >
-          {MONTHS.slice(0, maxMonth + 1)
-            .map((m, i) => (
-              <option key={i} value={i}>
-                {m}
-              </option>
-            ))
-            .reverse()}
-        </select>
+        {/* Month comes from the sidebar selector; shown here for context. */}
+        <span className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm font-semibold text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+          {MONTHS[selMonth]}
+        </span>
       </div>
 
       {showMonthSection && (
@@ -302,49 +278,56 @@ export default function Overview() {
           }
         />
         <Stat label="Impostos do ano (apuração)" value={brl(tax.data?.year_total ?? 0)} />
-        <Stat label="Distribuição de lucros (ano)" value={brl(annualDist.total)} />
       </div>
 
-      {annualDist.taxable && (
+      {/* The IRRF alta renda details only apply from 2026 on; earlier years
+          show just the annual total. */}
       <Card className="p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
             Distribuição de lucros no ano · {year}
           </p>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              annualDist.total > ANNUAL_REFUND_LIMIT
-                ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
-            }`}
-          >
-            {annualDist.total > ANNUAL_REFUND_LIMIT ? "Acima de R$600k" : "IRRF restituível"}
-          </span>
+          {annualDist.taxable && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                annualDist.total > ANNUAL_REFUND_LIMIT
+                  ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+              }`}
+            >
+              {annualDist.total > ANNUAL_REFUND_LIMIT ? "Acima de R$600k" : "IRRF restituível"}
+            </span>
+          )}
         </div>
         <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
           {brl(annualDist.total)}
-          <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
-            {" "}
-            de {brl(ANNUAL_REFUND_LIMIT)}
-          </span>
+          {annualDist.taxable && (
+            <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
+              {" "}
+              de {brl(ANNUAL_REFUND_LIMIT)}
+            </span>
+          )}
         </p>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-          <div
-            className={`h-full ${annualDist.total > ANNUAL_REFUND_LIMIT ? "bg-red-500" : "bg-emerald-500"}`}
-            style={{ width: `${Math.min(100, (annualDist.total / ANNUAL_REFUND_LIMIT) * 100)}%` }}
-          />
-        </div>
-        <p className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">
-          IRRF alta renda retido no ano:{" "}
-          <span className="font-semibold">{brl(annualDist.irrf)}</span>
-        </p>
-        <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-          Retido 10% sobre o total dos meses acima de {brl(MONTHLY_LIMIT)} (DARF cód. 1841).
-          Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
-          {brl(ANNUAL_REFUND_LIMIT)}.
-        </p>
+        {annualDist.taxable && (
+          <>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+              <div
+                className={`h-full ${annualDist.total > ANNUAL_REFUND_LIMIT ? "bg-red-500" : "bg-emerald-500"}`}
+                style={{ width: `${Math.min(100, (annualDist.total / ANNUAL_REFUND_LIMIT) * 100)}%` }}
+              />
+            </div>
+            <p className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">
+              IRRF alta renda retido no ano:{" "}
+              <span className="font-semibold">{brl(annualDist.irrf)}</span>
+            </p>
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              Retido 10% sobre o total dos meses acima de {brl(MONTHLY_LIMIT)} (DARF cód. 1841).
+              Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
+              {brl(ANNUAL_REFUND_LIMIT)}.
+            </p>
+          </>
+        )}
       </Card>
-      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Stat

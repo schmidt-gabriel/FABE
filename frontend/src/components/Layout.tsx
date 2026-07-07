@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { pb } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
-import { useYear, yearOptions } from "../lib/year";
+import { MONTHS, useYear, yearOptions } from "../lib/year";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 
 const nav = [
@@ -52,7 +52,11 @@ function ThemeToggle() {
 }
 
 export default function Layout() {
-  const { year, setYear } = useYear();
+  const { year, setYear, month, setMonth } = useYear();
+  // Same pattern as the Overview dropdown: don't offer future months in the
+  // current year.
+  const now = new Date();
+  const maxMonth = year === now.getFullYear() ? now.getMonth() : 11;
 
   // Re-render when the auth record changes (e.g. email edited in Config →
   // Usuário) so the sidebar shows the current email.
@@ -92,6 +96,26 @@ export default function Layout() {
                   {y}
                 </option>
               ))}
+            </select>
+          </div>
+          <div className="px-2 pb-1 pt-2">
+            <label className="mb-1 block text-xs font-medium text-neutral-400 dark:text-neutral-500">
+              Mês
+            </label>
+            {/* Months listed newest-first so the current month is always on
+                top, mirroring the Overview dropdown. */}
+            <select
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+            >
+              {MONTHS.slice(0, maxMonth + 1)
+                .map((name, i) => (
+                  <option key={name} value={String(i + 1).padStart(2, "0")}>
+                    {name}
+                  </option>
+                ))
+                .reverse()}
             </select>
           </div>
           <nav className="mt-2 flex-1 space-y-1">

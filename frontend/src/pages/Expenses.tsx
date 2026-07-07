@@ -1,35 +1,25 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
-import { useYear } from "../lib/year";
+import { MONTHS, useYear } from "../lib/year";
 import type { Expense } from "../lib/types";
 import { EXPENSE_CATEGORIES } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = { date: "", category: "", amount: "", notes: "" };
-const currentMonth = () => {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
-};
 
 export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
     sort: "-date",
   });
-  const { year } = useYear();
+  // Year + month come from the sidebar selectors.
+  const { year, month } = useYear();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
   const [filter, setFilter] = useState("");
-  const [monthFilter, setMonthFilter] = useState(currentMonth);
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // When the sidebar year changes, default to the current month (current year)
-  // or the whole year (past years).
-  useEffect(() => {
-    setMonthFilter(year === new Date().getFullYear() ? currentMonth() : "");
-  }, [year]);
 
   useEffect(() => {
     if (searchParams.get("new") === "1") {
@@ -68,21 +58,8 @@ export default function Expenses() {
   }
 
   const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
-  const months = [
-    ...new Set([
-      ...(year === new Date().getFullYear() ? [currentMonth()] : []),
-      ...inYear.map((x) => x.date.slice(0, 7)),
-    ]),
-  ]
-    .sort()
-    .reverse();
-  const fmtMonth = (ym: string) => {
-    const [y, m] = ym.split("-");
-    return `${m}/${y}`;
-  };
   const rows = inYear.filter(
-    (x) =>
-      (!filter || x.category === filter) && (!monthFilter || x.date.slice(0, 7) === monthFilter),
+    (x) => (!filter || x.category === filter) && x.date.slice(5, 7) === month,
   );
   const total = rows.reduce((s, x) => s + x.amount, 0);
 
@@ -91,16 +68,6 @@ export default function Expenses() {
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Despesas · {year}</h1>
         <div className="flex items-center gap-2">
-          <div className="w-36">
-            <Select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-              <option value="">Todos os meses</option>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {fmtMonth(m)}
-                </option>
-              ))}
-            </Select>
-          </div>
           <div className="w-44">
             <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option value="">Todas as categorias</option>
@@ -146,7 +113,11 @@ export default function Expenses() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma despesa {filter || monthFilter ? "com esses filtros" : "registrada"}.
+                  Nenhuma despesa{" "}
+                  {filter
+                    ? "com esses filtros"
+                    : `registrada em ${MONTHS[Number(month) - 1]} de ${year}`}
+                  .
                 </td>
               </tr>
             )}

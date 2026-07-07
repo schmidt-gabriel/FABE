@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection, usePlatformNames } from "../lib/useCollection";
-import { useYear } from "../lib/year";
+import { MONTHS, useYear } from "../lib/year";
 import type { ImportRecord } from "../lib/types";
 import { pb, brl, usd, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
@@ -89,8 +89,11 @@ export default function Imports() {
     setOpen(false);
   }
 
-  const { year } = useYear();
-  const rows = (list.data ?? []).filter((i) => i.convert_day.slice(0, 4) === String(year));
+  // Year + month come from the sidebar selectors.
+  const { year, month } = useYear();
+  const rows = (list.data ?? []).filter(
+    (i) => i.convert_day.slice(0, 4) === String(year) && i.convert_day.slice(5, 7) === month,
+  );
   const totalUsd = rows.reduce((s, i) => s + i.amount_usd, 0);
   const totalBrl = rows.reduce((s, i) => s + i.amount_brl, 0);
 
@@ -134,7 +137,7 @@ export default function Imports() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma importação registrada em {year}.
+                  Nenhuma importação registrada em {MONTHS[Number(month) - 1]} de {year}.
                 </td>
               </tr>
             )}

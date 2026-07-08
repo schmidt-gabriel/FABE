@@ -31,7 +31,6 @@ export default function Expenses() {
   // expense is necessarily paid, so the checkbox is hidden and the submit
   // button reads "Registrar".
   const [registering, setRegistering] = useState(false);
-  const [filter, setFilter] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -113,9 +112,7 @@ export default function Expenses() {
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   })();
   const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
-  const rows = inYear.filter(
-    (x) => (!filter || x.category === filter) && x.date.slice(5, 7) === month,
-  );
+  const rows = inYear.filter((x) => x.date.slice(5, 7) === month);
 
   // Items from the Overview "Próximos pagamentos" card without an expense in
   // the selected month yet: unpaid recurring services and pending other taxes.
@@ -152,9 +149,7 @@ export default function Expenses() {
         amount: t.amount,
         payment_type: "manual",
       })),
-  ]
-    .filter((u) => !filter || u.category === filter)
-    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  ].sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const total = rows.filter(expensePaid).reduce((s, x) => s + x.amount, 0);
   const pendingTotal =
@@ -162,32 +157,16 @@ export default function Expenses() {
     upcoming.reduce((s, u) => s + u.amount, 0);
 
   // Category is free text; suggest the known categories plus service names
-  // (services are marked paid by a same-named expense). The filter also lists
-  // whatever categories already exist in the data.
+  // (services are marked paid by a same-named expense).
   const categorySuggestions = [
     ...new Set([...EXPENSE_CATEGORIES, ...(services.list.data ?? []).map((s) => s.name)]),
   ];
-  const filterCategories = [
-    ...new Set([...categorySuggestions, ...(list.data ?? []).map((x) => x.category)]),
-  ].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Despesas · {year}</h1>
-        <div className="flex items-center gap-2">
-          <div className="w-44">
-            <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option value="">Todas as categorias</option>
-              {filterCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button onClick={openNew}>+ Adicionar</Button>
-        </div>
+        <Button onClick={openNew}>+ Adicionar</Button>
       </div>
 
       <Card className="overflow-hidden">
@@ -269,11 +248,7 @@ export default function Expenses() {
             {rows.length === 0 && upcoming.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhuma despesa{" "}
-                  {filter
-                    ? "com esses filtros"
-                    : `registrada em ${MONTHS[Number(month) - 1]} de ${year}`}
-                  .
+                  Nenhuma despesa registrada em {MONTHS[Number(month) - 1]} de {year}.
                 </td>
               </tr>
             )}

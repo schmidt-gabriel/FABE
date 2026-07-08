@@ -61,6 +61,22 @@ function InvoiceFeeCard({ used }: { used: number }) {
   );
 }
 
+// Total of the month's paid expenses, next to the invoice/distribution cards.
+function MonthExpensesCard({ total }: { total: number }) {
+  return (
+    <Card className="p-5">
+      <p className="text-sm text-neutral-500 dark:text-neutral-400">Despesas do mês</p>
+      <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+        {brl(total)}
+        <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500"> pago</span>
+      </p>
+      <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
+        Soma das despesas pagas no mês.
+      </p>
+    </Card>
+  );
+}
+
 // Profit distribution: above R$50k/month the full month's amount is taxed at
 // 10% IRRF (alta renda). It is not a hard cap, so we show the withholding.
 function DistributionMonthCard({ used, applyIrrf }: { used: number; applyIrrf: boolean }) {
@@ -190,6 +206,13 @@ export default function Overview() {
   const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
   const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
   const annualDist = annualDistribution(dist.list.data, year);
+  // Total of the month's paid expenses (scheduled ones only once paid).
+  const despesasMes = sumMonth(
+    (expenses.list.data ?? []).filter(expensePaid),
+    (r) => r.amount,
+    ym,
+    (r) => r.date,
+  );
 
   return (
     <div className="space-y-6">
@@ -236,12 +259,13 @@ export default function Overview() {
         <Receivables ym={ym} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <InvoiceFeeCard used={invoiceUsed} />
         <DistributionMonthCard
           used={distUsed}
           applyIrrf={Number(ym.slice(0, 4)) >= IRRF_START_YEAR}
         />
+        <MonthExpensesCard total={despesasMes} />
       </div>
       </>
       )}

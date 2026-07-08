@@ -54,6 +54,10 @@ That same email/password logs into both the admin (`:8090/_/`) and the app UI
 `Login.tsx`). There is no separate `users` account. CLI alternative:
 `docker compose exec backend /app/fin superuser upsert EMAIL PASS`.
 
+To skip that step entirely, set **`MASTER_EMAIL`** and **`MASTER_PASSWORD`** env
+vars: on every startup `main.go` upserts a superuser with those credentials
+(password kept in sync). Handy for a fresh deploy; leave unset to disable.
+
 ### Working with data / resetting
 
 Real data (2023-2026) lives outside the repo in
@@ -74,7 +78,8 @@ Regenerate it from the running DB: `GET /api/export/backup` piped to the file.
 `clients` (name, default_platform, monthly_amount, billing_type monthly|hourly,
 pay_frequency monthly|weekly, active), `platforms` (name, active),
 `remittances` (client→, platform, amount_usd, pay_day), `imports` (platform, amount_usd,
-convert_day, rate, amount_brl), `expenses` (date, category, amount, notes, scheduled, paid),
+convert_day, rate, amount_brl), `expenses` (date, category free text, amount, notes, scheduled,
+paid, payment_type auto|manual),
 `recurring_services` (name, exp_day, default_amount, payment_type auto|manual),
 `profit_distributions` (month, amount, cota_irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `other_taxes` (name, reference,
@@ -107,6 +112,14 @@ new platforms can be added in Config.
   Contador's table: ≤R$50k → R$295/mês; R$50k–100k → R$444; R$100k–1M → R$622; >R$1M → R$918.
 - **Recurring services** (`recurring_services`) have a due day; on the Overview a
   service shows red "atrasado" if past its day with no matching expense that month.
+  Matching is by category: an expense whose `category` equals the service name marks it
+  paid, which is why `expenses.category` is free text (the frontend suggests the known
+  categories plus the service names). Services carry `payment_type` (auto|manual); a
+  **manual** one is registered by clicking "Registrar" (Despesas) or "+ Despesa". An
+  **auto** one posts its expense automatically on the due date: `autoRegisterAutoServices`
+  in `api/autoregister.go` runs on startup and daily (cron 06:00), creating a paid expense
+  (category = service name, amount = default_amount) for the current month once `exp_day`
+  is reached, skipping any already recorded. Only the current month is handled.
 - **Future expenses:** an expense created as "a pagar" gets `scheduled=true` and its
   `date` is the due date; it shows in the Overview "Próximos pagamentos" card and is
   excluded from expense totals until `paid=true`. `scheduled` stays true after payment

@@ -5,6 +5,11 @@ services:
       - "8090:8090"
     volumes:
       - pb_data:/app/pb_data
+    # Optional master superuser: set both to auto-create/sync a login on
+    # startup (skips the manual pbinstall step). Leave unset to disable.
+    environment:
+      - MASTER_EMAIL=${MASTER_EMAIL:-}
+      - MASTER_PASSWORD=${MASTER_PASSWORD:-}
     restart: unless-stopped
 
   frontend:

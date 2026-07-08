@@ -21,6 +21,20 @@ func Register(app core.App) {
 
 	registerHooks(app)
 
+	// Auto-debited recurring services post their expense on the due date: catch
+	// up once at startup, then check daily.
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		if err := autoRegisterAutoServices(app); err != nil {
+			app.Logger().Warn("auto-register services failed", "err", err)
+		}
+		return e.Next()
+	})
+	app.Cron().MustAdd("autoRegisterServices", "0 6 * * *", func() {
+		if err := autoRegisterAutoServices(app); err != nil {
+			app.Logger().Warn("auto-register services failed", "err", err)
+		}
+	})
+
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
 			// GET /api/tax/compute?year=2026

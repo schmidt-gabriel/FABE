@@ -52,7 +52,13 @@ export interface Expense extends BaseRecord {
   // treated as paid regardless of `paid`.
   scheduled?: boolean;
   paid?: boolean;
+  // Auto-debited vs paid manually. Empty (legacy records) is treated as manual.
+  payment_type?: "auto" | "manual";
 }
+
+// Human label for a payment_type; empty defaults to manual.
+export const paymentLabel = (t?: "auto" | "manual") =>
+  t === "auto" ? "Automático" : "Manual";
 
 // A regular expense counts as paid; a scheduled one only after being marked.
 export const expensePaid = (e: Expense) => !e.scheduled || !!e.paid;

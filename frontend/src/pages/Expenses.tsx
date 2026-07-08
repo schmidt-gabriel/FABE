@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Expense, OtherTax, RecurringService } from "../lib/types";
-import { EXPENSE_CATEGORIES, expensePaid } from "../lib/types";
+import { EXPENSE_CATEGORIES, expensePaid, paymentLabel } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
-const empty = { date: "", category: "", amount: "", notes: "" };
+const empty = { date: "", category: "", amount: "", notes: "", payment_type: "manual" };
 
 export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
@@ -17,6 +18,7 @@ export default function Expenses() {
   // read-only "a pagar" rows until their expense exists.
   const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
   const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
+  const qc = useQueryClient();
   // Year + month come from the sidebar selectors.
   const { year, month } = useYear();
   const [open, setOpen] = useState(false);
@@ -25,6 +27,10 @@ export default function Expenses() {
   // "Já paga" checkbox; unchecked creates a future expense (a pagar) whose
   // date is the due date, shown in the Overview "Próximos pagamentos" card.
   const [paga, setPaga] = useState(true);
+  // True when the modal was opened from an upcoming row's "Registrar": the
+  // expense is necessarily paid, so the checkbox is hidden and the submit
+  // button reads "Registrar".
+  const [registering, setRegistering] = useState(false);
   const [filter, setFilter] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -40,6 +46,7 @@ export default function Expenses() {
     setEditing(null);
     setForm(empty);
     setPaga(true);
+    setRegistering(false);
     setOpen(true);
   }
   function openEdit(x: Expense) {
@@ -49,21 +56,38 @@ export default function Expenses() {
       category: x.category,
       amount: String(x.amount),
       notes: x.notes ?? "",
+      payment_type: x.payment_type || "manual",
     });
     setPaga(expensePaid(x));
+    setRegistering(false);
     setOpen(true);
   }
-  // "Registrar" on an upcoming service row: new-expense modal pre-filled as
-  // paid today, which removes the pending row once saved.
-  function openPay(u: { category: string; notes: string; amount: number }) {
+  // "Registrar" on an upcoming row. A tax is paid by flipping its `paid` flag,
+  // which makes the backend hook auto-create the linked expense (so we must
+  // not create one here). A service opens the new-expense modal pre-filled as
+  // paid today. Either way the pending row disappears once its expense exists.
+  async function registerUpcoming(u: {
+    taxId?: string;
+    category: string;
+    notes: string;
+    amount: number;
+    payment_type: string;
+  }) {
+    if (u.taxId) {
+      await taxes.update.mutateAsync({ id: u.taxId, data: { paid: true } });
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      return;
+    }
     setEditing(null);
     setForm({
       date: today,
       category: u.category,
       amount: u.amount ? String(u.amount) : "",
       notes: u.notes,
+      payment_type: u.payment_type,
     });
     setPaga(true);
+    setRegistering(true);
     setOpen(true);
   }
   async function submit(e: React.FormEvent) {
@@ -73,6 +97,7 @@ export default function Expenses() {
       category: form.category,
       amount: Number(form.amount),
       notes: form.notes,
+      payment_type: form.payment_type,
       // Once scheduled, stay scheduled so a paid one still shows as "pago"
       // in the Overview card instead of vanishing from it.
       scheduled: (editing?.scheduled ?? false) || !paga,
@@ -94,8 +119,8 @@ export default function Expenses() {
 
   // Items from the Overview "Próximos pagamentos" card without an expense in
   // the selected month yet: unpaid recurring services and pending other taxes.
-  // Services get a "Registrar" shortcut (pre-filled expense); taxes are paid
-  // on the Impostos page (their expense is auto-created by the hook).
+  // Both get a "Registrar" shortcut; taxes carry `taxId` so registering marks
+  // the tax paid (its expense is auto-created by the backend hook).
   const ym = `${year}-${month}`;
   const servicePaid = (name: string) =>
     inYear.some(
@@ -109,21 +134,23 @@ export default function Expenses() {
       .filter((s) => !servicePaid(s.name))
       .map((s) => ({
         key: `svc-${s.id}`,
+        taxId: undefined as string | undefined,
         date: `${ym}-${String(s.exp_day).padStart(2, "0")}`,
         category: s.name,
-        notes: s.payment_type === "auto" ? "débito automático" : "",
+        notes: "",
         amount: s.default_amount ?? 0,
-        payable: true,
+        payment_type: s.payment_type === "auto" ? "auto" : "manual",
       })),
     ...(taxes.list.data ?? [])
       .filter((t) => !t.paid && t.due_date.slice(0, 7) === ym)
       .map((t) => ({
         key: `tax-${t.id}`,
+        taxId: t.id,
         date: t.due_date.slice(0, 10),
         category: "Outros",
         notes: `${t.name} (imposto)`,
         amount: t.amount,
-        payable: false,
+        payment_type: "manual",
       })),
   ]
     .filter((u) => !filter || u.category === filter)
@@ -134,6 +161,16 @@ export default function Expenses() {
     rows.filter((x) => !expensePaid(x)).reduce((s, x) => s + x.amount, 0) +
     upcoming.reduce((s, u) => s + u.amount, 0);
 
+  // Category is free text; suggest the known categories plus service names
+  // (services are marked paid by a same-named expense). The filter also lists
+  // whatever categories already exist in the data.
+  const categorySuggestions = [
+    ...new Set([...EXPENSE_CATEGORIES, ...(services.list.data ?? []).map((s) => s.name)]),
+  ];
+  const filterCategories = [
+    ...new Set([...categorySuggestions, ...(list.data ?? []).map((x) => x.category)]),
+  ].sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -142,7 +179,7 @@ export default function Expenses() {
           <div className="w-44">
             <Select value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option value="">Todas as categorias</option>
-              {EXPENSE_CATEGORIES.map((c) => (
+              {filterCategories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -160,6 +197,7 @@ export default function Expenses() {
               <th className="px-4 py-3 text-left">Data</th>
               <th className="px-4 py-3 text-left">Categoria</th>
               <th className="px-4 py-3 text-left">Observação</th>
+              <th className="px-4 py-3 text-left">Pagamento</th>
               <th className="px-4 py-3 text-right">Valor</th>
               <th className="px-4 py-3" />
             </tr>
@@ -185,17 +223,14 @@ export default function Expenses() {
                 <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
                   {u.notes || "—"}
                 </td>
+                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                  {paymentLabel(u.payment_type as "auto" | "manual")}
+                </td>
                 <td className="px-4 py-3 text-right">{u.amount ? brl(u.amount) : "—"}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  {u.payable ? (
-                    <Button variant="ghost" onClick={() => openPay(u)}>
-                      Registrar
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                      via Impostos
-                    </span>
-                  )}
+                  <Button variant="ghost" onClick={() => registerUpcoming(u)}>
+                    Registrar
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -217,6 +252,9 @@ export default function Expenses() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{x.notes || "—"}</td>
+                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                  {paymentLabel(x.payment_type)}
+                </td>
                 <td className="px-4 py-3 text-right">{brl(x.amount)}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <Button variant="ghost" onClick={() => openEdit(x)}>
@@ -230,7 +268,7 @@ export default function Expenses() {
             ))}
             {rows.length === 0 && upcoming.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
                   Nenhuma despesa{" "}
                   {filter
                     ? "com esses filtros"
@@ -242,7 +280,7 @@ export default function Expenses() {
           </tbody>
           <tfoot className="bg-neutral-50 font-semibold dark:bg-neutral-800/50">
             <tr className="border-t border-neutral-200 dark:border-neutral-700">
-              <td className="px-4 py-3" colSpan={3}>
+              <td className="px-4 py-3" colSpan={4}>
                 Total
               </td>
               <td className="px-4 py-3 text-right">{brl(total)}</td>
@@ -250,7 +288,7 @@ export default function Expenses() {
             </tr>
             {pendingTotal > 0 && (
               <tr className="border-t border-neutral-200 text-amber-600 dark:border-neutral-700 dark:text-amber-400">
-                <td className="px-4 py-3" colSpan={3}>
+                <td className="px-4 py-3" colSpan={4}>
                   A pagar
                 </td>
                 <td className="px-4 py-3 text-right">{brl(pendingTotal)}</td>
@@ -263,7 +301,7 @@ export default function Expenses() {
 
       {open && (
         <Modal
-          title={editing ? "Editar despesa" : "Nova despesa"}
+          title={editing ? "Editar despesa" : registering ? "Registrar pagamento" : "Nova despesa"}
           onClose={() => setOpen(false)}
         >
           <form onSubmit={submit} className="space-y-4">
@@ -276,18 +314,18 @@ export default function Expenses() {
               />
             </Field>
             <Field label="Categoria">
-              <Select
+              <Input
                 required
+                list="expense-categories"
+                placeholder="Selecione ou digite…"
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-              >
-                <option value="">Selecione…</option>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+              />
+              <datalist id="expense-categories">
+                {categorySuggestions.map((c) => (
+                  <option key={c} value={c} />
                 ))}
-              </Select>
+              </datalist>
             </Field>
             <Field label="Valor (BRL)">
               <Input
@@ -304,28 +342,39 @@ export default function Expenses() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </Field>
-            <div>
-              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                <input
-                  type="checkbox"
-                  checked={paga}
-                  onChange={(e) => setPaga(e.target.checked)}
-                  className="h-4 w-4 cursor-pointer accent-neutral-900 dark:accent-neutral-100"
-                />
-                Já paga
-              </label>
-              {!paga && (
-                <p className="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
-                  Despesa futura: aparece em "Próximos pagamentos" na visão geral até ser
-                  marcada como paga.
-                </p>
-              )}
-            </div>
+            <Field label="Pagamento">
+              <Select
+                value={form.payment_type}
+                onChange={(e) => setForm({ ...form, payment_type: e.target.value })}
+              >
+                <option value="manual">Manual</option>
+                <option value="auto">Automático (débito automático)</option>
+              </Select>
+            </Field>
+            {!registering && (
+              <div>
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={paga}
+                    onChange={(e) => setPaga(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer accent-neutral-900 dark:accent-neutral-100"
+                  />
+                  Já paga
+                </label>
+                {!paga && (
+                  <p className="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                    Despesa futura: aparece em "Próximos pagamentos" na visão geral até ser
+                    marcada como paga.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">Salvar</Button>
+              <Button type="submit">{registering ? "Registrar" : "Salvar"}</Button>
             </div>
           </form>
         </Modal>

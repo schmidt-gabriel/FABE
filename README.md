@@ -29,23 +29,74 @@ Single-user app (owner only).
 └── Makefile
 ```
 
-## Running with Docker
+## Login (all setups)
+
+Single account: the app authenticates directly against PocketBase's superuser.
+There is no separate `users` collection. Create the login in any of these ways:
+
+- **Env vars (recommended for a fresh deploy):** set `MASTER_EMAIL` and
+  `MASTER_PASSWORD`. On every startup the backend upserts a superuser with those
+  credentials (password kept in sync), so you can log in right away.
+- **CLI:** `cd backend && go run . superuser upsert EMAIL PASS` (local), or
+  `docker compose exec backend /app/fin superuser upsert EMAIL PASS` (Docker).
+- **Install link:** on a fresh DB the backend prints a one-time `pbinstall` link
+  on startup; open it (replace `0.0.0.0` with `localhost`) to create the superuser
+  at http://localhost:8090/_/.
+
+The same email/password logs into both the PocketBase admin (`:8090/_/`) and the
+app UI.
+
+## Deploy
+
+### Docker Compose (local stack)
 
 ```bash
-make up          # backend on :8090, frontend on :5173
+# optional: auto-create the login on startup
+export MASTER_EMAIL=you@example.com MASTER_PASSWORD=change-me
+
+make up           # docker compose up --build -d  (backend :8090, frontend :5173)
+make logs         # follow logs
+make down         # stop the stack
 ```
 
-1. Open the PocketBase **admin** at http://localhost:8090/_/ and create the superuser.
-2. Under `Collections → users`, create the owner record (email + password).
-3. Open the app at http://localhost:5173 and log in.
+Then open the app at http://localhost:5173 and log in (see **Login** above).
 
-## Running locally (without Docker)
+### Kubernetes
+
+Images are built and pushed to `ghcr.io/schmidt-gabriel/financeapp-{backend,frontend}`
+by CI on every push to `main`. Everything is in a single manifest, [`k8s.yaml`](k8s.yaml).
 
 ```bash
-make backend     # :8090  (creates pb_data/ on first run)
-make frontend    # :5173
-make test        # tax engine tests
+# 1. Edit k8s.yaml first:
+#    - financeapp-master Secret: MASTER_EMAIL / MASTER_PASSWORD
+#    - PVC size / storageClassName
+#    - Ingress host + the frontend's ALLOWED_HOSTS env (must match the host)
+#    - if the ghcr packages are private, create a pull secret (see comments)
+
+kubectl apply -f k8s.yaml
+
+# 2. Wait for the rollout
+kubectl -n financeapp rollout status deploy/financeapp-backend
+kubectl -n financeapp rollout status deploy/financeapp-frontend
+
+# 3. Access via the Ingress host, or port-forward for a quick check
+kubectl -n financeapp port-forward svc/financeapp-frontend 5173:5173
 ```
+
+The backend keeps its SQLite data on a `ReadWriteOnce` PVC and runs single-replica
+(`Recreate` strategy). Only the frontend is exposed; it proxies `/api` and `/_` to
+the backend in-cluster.
+
+### Local (without Docker)
+
+```bash
+make backend      # :8090  (creates pb_data/ on first run)
+make frontend     # :5173  (installs deps, then Vite dev)
+make test         # tax engine tests
+```
+
+Create the login with `make admin EMAIL=.. PASS=..`, or export
+`MASTER_EMAIL`/`MASTER_PASSWORD` before `make backend`.
 
 ## Tax parameters
 

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Expense } from "../lib/types";
-import { EXPENSE_CATEGORIES } from "../lib/types";
+import { EXPENSE_CATEGORIES, expensePaid } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
@@ -18,6 +18,9 @@ export default function Expenses() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
+  // "Já paga" checkbox; unchecked creates a future expense (a pagar) whose
+  // date is the due date, shown in the Overview "Próximos pagamentos" card.
+  const [paga, setPaga] = useState(true);
   const [filter, setFilter] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -32,6 +35,7 @@ export default function Expenses() {
   function openNew() {
     setEditing(null);
     setForm(empty);
+    setPaga(true);
     setOpen(true);
   }
   function openEdit(x: Expense) {
@@ -42,6 +46,7 @@ export default function Expenses() {
       amount: String(x.amount),
       notes: x.notes ?? "",
     });
+    setPaga(expensePaid(x));
     setOpen(true);
   }
   async function submit(e: React.FormEvent) {
@@ -51,6 +56,10 @@ export default function Expenses() {
       category: form.category,
       amount: Number(form.amount),
       notes: form.notes,
+      // Once scheduled, stay scheduled so a paid one still shows as "pago"
+      // in the Overview card instead of vanishing from it.
+      scheduled: (editing?.scheduled ?? false) || !paga,
+      paid: paga,
     };
     if (editing) await update.mutateAsync({ id: editing.id, data });
     else await create.mutateAsync(data);
@@ -61,7 +70,12 @@ export default function Expenses() {
   const rows = inYear.filter(
     (x) => (!filter || x.category === filter) && x.date.slice(5, 7) === month,
   );
-  const total = rows.reduce((s, x) => s + x.amount, 0);
+  const total = rows.filter(expensePaid).reduce((s, x) => s + x.amount, 0);
+  const pendingTotal = rows.filter((x) => !expensePaid(x)).reduce((s, x) => s + x.amount, 0);
+  const today = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
 
   return (
     <div className="space-y-6">
@@ -97,7 +111,20 @@ export default function Expenses() {
             {rows.map((x) => (
               <tr key={x.id} className="border-t border-neutral-100 dark:border-neutral-800">
                 <td className="px-4 py-3">{fmtDate(x.date)}</td>
-                <td className="px-4 py-3 font-medium">{x.category}</td>
+                <td className="px-4 py-3 font-medium">
+                  {x.category}
+                  {!expensePaid(x) && (
+                    <span
+                      className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                        x.date.slice(0, 10) < today
+                          ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                      }`}
+                    >
+                      {x.date.slice(0, 10) < today ? "atrasada" : "a pagar"}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{x.notes || "—"}</td>
                 <td className="px-4 py-3 text-right">{brl(x.amount)}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -130,6 +157,15 @@ export default function Expenses() {
               <td className="px-4 py-3 text-right">{brl(total)}</td>
               <td />
             </tr>
+            {pendingTotal > 0 && (
+              <tr className="border-t border-neutral-200 text-amber-600 dark:border-neutral-700 dark:text-amber-400">
+                <td className="px-4 py-3" colSpan={3}>
+                  A pagar
+                </td>
+                <td className="px-4 py-3 text-right">{brl(pendingTotal)}</td>
+                <td />
+              </tr>
+            )}
           </tfoot>
         </table>
       </Card>
@@ -140,7 +176,7 @@ export default function Expenses() {
           onClose={() => setOpen(false)}
         >
           <form onSubmit={submit} className="space-y-4">
-            <Field label="Data">
+            <Field label={paga ? "Data" : "Vencimento"}>
               <Input
                 type="date"
                 required
@@ -177,6 +213,23 @@ export default function Expenses() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </Field>
+            <div>
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={paga}
+                  onChange={(e) => setPaga(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-neutral-900 dark:accent-neutral-100"
+                />
+                Já paga
+              </label>
+              {!paga && (
+                <p className="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                  Despesa futura: aparece em "Próximos pagamentos" na visão geral até ser
+                  marcada como paga.
+                </p>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancelar

@@ -74,7 +74,7 @@ Regenerate it from the running DB: `GET /api/export/backup` piped to the file.
 `clients` (name, default_platform, monthly_amount, billing_type monthly|hourly,
 pay_frequency monthly|weekly, active), `platforms` (name, active),
 `remittances` (client→, platform, amount_usd, pay_day), `imports` (platform, amount_usd,
-convert_day, rate, amount_brl), `expenses` (date, category, amount, notes),
+convert_day, rate, amount_brl), `expenses` (date, category, amount, notes, scheduled, paid),
 `recurring_services` (name, exp_day), `profit_distributions` (month, amount, cota_irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `other_taxes` (name, reference,
 due_date, amount, paid, expense_id), `settings` (singleton, tax params).
@@ -106,6 +106,11 @@ new platforms can be added in Config.
   Contador's table: ≤R$50k → R$295/mês; R$50k–100k → R$444; R$100k–1M → R$622; >R$1M → R$918.
 - **Recurring services** (`recurring_services`) have a due day; on the Overview a
   service shows red "atrasado" if past its day with no matching expense that month.
+- **Future expenses:** an expense created as "a pagar" gets `scheduled=true` and its
+  `date` is the due date; it shows in the Overview "Próximos pagamentos" card and is
+  excluded from expense totals until `paid=true`. `scheduled` stays true after payment
+  so the card keeps showing it as "pago". Regular expenses (`scheduled=false`) are
+  always treated as paid.
 - **Other taxes** marked paid auto-create an expense (category "Outros"), linked via
   `expense_id`; unmarking deletes it (hook in `hooks.go`).
 

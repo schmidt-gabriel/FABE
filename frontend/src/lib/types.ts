@@ -43,11 +43,19 @@ export interface ImportRecord extends BaseRecord {
 }
 
 export interface Expense extends BaseRecord {
-  date: string;
+  date: string; // for scheduled expenses this is the due date
   category: string;
   amount: number;
   notes?: string;
+  // Created as a future expense ("a pagar"); shows in the Overview
+  // "Próximos pagamentos" card. Regular expenses (scheduled=false) are
+  // treated as paid regardless of `paid`.
+  scheduled?: boolean;
+  paid?: boolean;
 }
+
+// A regular expense counts as paid; a scheduled one only after being marked.
+export const expensePaid = (e: Expense) => !e.scheduled || !!e.paid;
 
 export interface ProfitDistribution extends BaseRecord {
   month: string;
@@ -79,5 +87,6 @@ export const EXPENSE_CATEGORIES = [
   "DARF INSS",
   "DARF CSLL",
   "DARF IRPJ",
+  "Impostos",
   "Outros",
 ];

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, Remittance } from "../lib/types";
+import { expensePaid } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card } from "../components/ui";
 const MONTHLY_LIMIT = 50000; // R$50k/month for invoices and for profit distribution
@@ -168,7 +169,13 @@ export default function Overview() {
   const bruto = sum(imports.list.data, (r) => r.amount_brl, year, (r) => r.convert_day);
   const importedUsd = sum(imports.list.data, (r) => r.amount_usd, year, (r) => r.convert_day);
   const receivedUsd = sum(remittances.list.data, (r) => r.amount_usd, year, (r) => r.pay_day);
-  const despesas = sum(expenses.list.data, (r) => r.amount, year, (r) => r.date);
+  // Scheduled expenses only count once paid.
+  const despesas = sum(
+    (expenses.list.data ?? []).filter(expensePaid),
+    (r) => r.amount,
+    year,
+    (r) => r.date,
+  );
 
   const liquido = bruto - despesas;
   const toBring = receivedUsd - importedUsd;
@@ -225,7 +232,7 @@ export default function Overview() {
       {showMonthSection && (
       <>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Vencimentos ym={ym} />
+        <UpcomingPayments ym={ym} />
         <Receivables ym={ym} />
       </div>
 
@@ -348,7 +355,7 @@ export default function Overview() {
   );
 }
 
-function Vencimentos({ ym }: { ym: string }) {
+function UpcomingPayments({ ym }: { ym: string }) {
   const services = useCollection<{ id: string; name: string; exp_day: number }>(
     "recurring_services",
     { sort: "exp_day" },
@@ -363,13 +370,22 @@ function Vencimentos({ ym }: { ym: string }) {
   const day = ym < currentYm ? 32 : ym > currentYm ? 0 : now.getDate();
   const paidThisMonth = (name: string) =>
     (expenses.list.data ?? []).some(
-      (e) => e.category.toUpperCase() === name.toUpperCase() && e.date.slice(0, 7) === ym,
+      (e) =>
+        expensePaid(e) &&
+        e.category.toUpperCase() === name.toUpperCase() &&
+        e.date.slice(0, 7) === ym,
     );
 
   // IRPF/INSS DARFs due in the selected month come from other_taxes, which
   // carries its own paid flag and amount.
   const monthTaxes = (taxes.list.data ?? []).filter(
     (t) => t.due_date.slice(0, 7) === ym && /irpf|inss/i.test(t.name),
+  );
+
+  // One-off future expenses (despesas a pagar) due in the selected month;
+  // they keep showing here as "pago" after being marked as paid.
+  const monthScheduled = (expenses.list.data ?? []).filter(
+    (e) => e.scheduled && e.date.slice(0, 7) === ym,
   );
 
   const items = [
@@ -386,6 +402,13 @@ function Vencimentos({ ym }: { ym: string }) {
       day: Number(t.due_date.slice(8, 10)),
       amount: t.amount,
       paid: !!t.paid,
+    })),
+    ...monthScheduled.map((e) => ({
+      key: e.id,
+      name: e.notes || e.category,
+      day: Number(e.date.slice(8, 10)),
+      amount: e.amount,
+      paid: !!e.paid,
     })),
   ];
 
@@ -423,7 +446,7 @@ function Vencimentos({ ym }: { ym: string }) {
     <Card className="overflow-hidden">
       <div className="border-b border-neutral-100 px-4 py-2.5 dark:border-neutral-800">
         <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-          Vencimentos recorrentes
+          Próximos pagamentos
         </h2>
       </div>
       <div className="grid grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">

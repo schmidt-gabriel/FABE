@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
-import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, Remittance } from "../lib/types";
+import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
 import { expensePaid } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card } from "../components/ui";
@@ -356,10 +356,7 @@ export default function Overview() {
 }
 
 function UpcomingPayments({ ym }: { ym: string }) {
-  const services = useCollection<{ id: string; name: string; exp_day: number }>(
-    "recurring_services",
-    { sort: "exp_day" },
-  );
+  const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
   const expenses = useCollection<Expense>("expenses", { sort: "-date" });
   const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
 
@@ -376,11 +373,9 @@ function UpcomingPayments({ ym }: { ym: string }) {
         e.date.slice(0, 7) === ym,
     );
 
-  // IRPF/INSS DARFs due in the selected month come from other_taxes, which
-  // carries its own paid flag and amount.
-  const monthTaxes = (taxes.list.data ?? []).filter(
-    (t) => t.due_date.slice(0, 7) === ym && /irpf|inss/i.test(t.name),
-  );
+  // Everything in "Outros impostos" (other_taxes) due in the selected month,
+  // each carrying its own paid flag and amount.
+  const monthTaxes = (taxes.list.data ?? []).filter((t) => t.due_date.slice(0, 7) === ym);
 
   // One-off future expenses (despesas a pagar) due in the selected month;
   // they keep showing here as "pago" after being marked as paid.
@@ -395,6 +390,7 @@ function UpcomingPayments({ ym }: { ym: string }) {
       day: s.exp_day,
       amount: 0,
       paid: paidThisMonth(s.name),
+      auto: s.payment_type === "auto",
     })),
     ...monthTaxes.map((t) => ({
       key: t.id,
@@ -402,6 +398,7 @@ function UpcomingPayments({ ym }: { ym: string }) {
       day: Number(t.due_date.slice(8, 10)),
       amount: t.amount,
       paid: !!t.paid,
+      auto: false,
     })),
     ...monthScheduled.map((e) => ({
       key: e.id,
@@ -409,6 +406,7 @@ function UpcomingPayments({ ym }: { ym: string }) {
       day: Number(e.date.slice(8, 10)),
       amount: e.amount,
       paid: !!e.paid,
+      auto: false,
     })),
   ];
 
@@ -465,6 +463,11 @@ function UpcomingPayments({ ym }: { ym: string }) {
                 {it.amount > 0 && (
                   <span className="ml-1.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">
                     {brl(it.amount)}
+                  </span>
+                )}
+                {it.auto && (
+                  <span className="ml-1.5 text-xs font-normal text-neutral-400 dark:text-neutral-500">
+                    · automático
                   </span>
                 )}
               </p>

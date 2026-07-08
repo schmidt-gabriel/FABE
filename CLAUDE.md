@@ -75,7 +75,8 @@ Regenerate it from the running DB: `GET /api/export/backup` piped to the file.
 pay_frequency monthly|weekly, active), `platforms` (name, active),
 `remittances` (client→, platform, amount_usd, pay_day), `imports` (platform, amount_usd,
 convert_day, rate, amount_brl), `expenses` (date, category, amount, notes, scheduled, paid),
-`recurring_services` (name, exp_day), `profit_distributions` (month, amount, cota_irrf),
+`recurring_services` (name, exp_day, default_amount, payment_type auto|manual),
+`profit_distributions` (month, amount, cota_irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `other_taxes` (name, reference,
 due_date, amount, paid, expense_id), `settings` (singleton, tax params).
 

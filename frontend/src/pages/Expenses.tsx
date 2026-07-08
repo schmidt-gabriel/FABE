@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
-import type { Expense } from "../lib/types";
+import type { Expense, OtherTax, RecurringService } from "../lib/types";
 import { EXPENSE_CATEGORIES, expensePaid } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
@@ -13,6 +13,10 @@ export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
     sort: "-date",
   });
+  // Sources of the Overview "Próximos pagamentos" card, mirrored here as
+  // read-only "a pagar" rows until their expense exists.
+  const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
+  const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
   // Year + month come from the sidebar selectors.
   const { year, month } = useYear();
   const [open, setOpen] = useState(false);
@@ -49,6 +53,19 @@ export default function Expenses() {
     setPaga(expensePaid(x));
     setOpen(true);
   }
+  // "Registrar" on an upcoming service row: new-expense modal pre-filled as
+  // paid today, which removes the pending row once saved.
+  function openPay(u: { category: string; notes: string; amount: number }) {
+    setEditing(null);
+    setForm({
+      date: today,
+      category: u.category,
+      amount: u.amount ? String(u.amount) : "",
+      notes: u.notes,
+    });
+    setPaga(true);
+    setOpen(true);
+  }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const data = {
@@ -66,16 +83,56 @@ export default function Expenses() {
     setOpen(false);
   }
 
-  const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
-  const rows = inYear.filter(
-    (x) => (!filter || x.category === filter) && x.date.slice(5, 7) === month,
-  );
-  const total = rows.filter(expensePaid).reduce((s, x) => s + x.amount, 0);
-  const pendingTotal = rows.filter((x) => !expensePaid(x)).reduce((s, x) => s + x.amount, 0);
   const today = (() => {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   })();
+  const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
+  const rows = inYear.filter(
+    (x) => (!filter || x.category === filter) && x.date.slice(5, 7) === month,
+  );
+
+  // Items from the Overview "Próximos pagamentos" card without an expense in
+  // the selected month yet: unpaid recurring services and pending other taxes.
+  // Services get a "Registrar" shortcut (pre-filled expense); taxes are paid
+  // on the Impostos page (their expense is auto-created by the hook).
+  const ym = `${year}-${month}`;
+  const servicePaid = (name: string) =>
+    inYear.some(
+      (x) =>
+        expensePaid(x) &&
+        x.category.toUpperCase() === name.toUpperCase() &&
+        x.date.slice(5, 7) === month,
+    );
+  const upcoming = [
+    ...(services.list.data ?? [])
+      .filter((s) => !servicePaid(s.name))
+      .map((s) => ({
+        key: `svc-${s.id}`,
+        date: `${ym}-${String(s.exp_day).padStart(2, "0")}`,
+        category: s.name,
+        notes: s.payment_type === "auto" ? "débito automático" : "",
+        amount: s.default_amount ?? 0,
+        payable: true,
+      })),
+    ...(taxes.list.data ?? [])
+      .filter((t) => !t.paid && t.due_date.slice(0, 7) === ym)
+      .map((t) => ({
+        key: `tax-${t.id}`,
+        date: t.due_date.slice(0, 10),
+        category: "Outros",
+        notes: `${t.name} (imposto)`,
+        amount: t.amount,
+        payable: false,
+      })),
+  ]
+    .filter((u) => !filter || u.category === filter)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+  const total = rows.filter(expensePaid).reduce((s, x) => s + x.amount, 0);
+  const pendingTotal =
+    rows.filter((x) => !expensePaid(x)).reduce((s, x) => s + x.amount, 0) +
+    upcoming.reduce((s, u) => s + u.amount, 0);
 
   return (
     <div className="space-y-6">
@@ -108,6 +165,40 @@ export default function Expenses() {
             </tr>
           </thead>
           <tbody>
+            {upcoming.map((u) => (
+              <tr key={u.key} className="border-t border-neutral-100 dark:border-neutral-800">
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
+                  {fmtDate(u.date)}
+                </td>
+                <td className="px-4 py-3 font-medium">
+                  {u.category}
+                  <span
+                    className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      u.date < today
+                        ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                    }`}
+                  >
+                    {u.date < today ? "atrasada" : "a pagar"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
+                  {u.notes || "—"}
+                </td>
+                <td className="px-4 py-3 text-right">{u.amount ? brl(u.amount) : "—"}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  {u.payable ? (
+                    <Button variant="ghost" onClick={() => openPay(u)}>
+                      Registrar
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                      via Impostos
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
             {rows.map((x) => (
               <tr key={x.id} className="border-t border-neutral-100 dark:border-neutral-800">
                 <td className="px-4 py-3">{fmtDate(x.date)}</td>
@@ -137,7 +228,7 @@ export default function Expenses() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && (
+            {rows.length === 0 && upcoming.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
                   Nenhuma despesa{" "}

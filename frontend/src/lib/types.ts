@@ -68,6 +68,8 @@ export interface RecurringService extends BaseRecord {
   name: string;
   exp_day: number;
   default_amount?: number;
+  // Empty (legacy records) is treated as manual.
+  payment_type?: "auto" | "manual";
 }
 
 export interface OtherTax extends BaseRecord {

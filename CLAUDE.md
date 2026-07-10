@@ -118,9 +118,11 @@ new platforms can be added in Config.
   **auto** one posts its expense automatically on the due date: `autoRegisterAutoServices`
   in `api/autoregister.go` runs on startup and daily (cron 06:00), creating a paid expense
   (category = service name, amount = default_amount) for the current month once `exp_day`
-  is reached, skipping any already recorded. Only the current month is handled. It can also
-  be triggered manually via `POST /api/maintenance/auto-register` (Config → Rotinas →
-  "Rodar agora"), which returns `{created}`.
+  is reached, skipping any already recorded. Only the current month is handled. The same
+  routine also marks any **scheduled expense** with `payment_type=auto` (a "despesa a pagar"
+  the user set to automatic) as paid once its date is reached (`autoPayScheduledAutoExpenses`).
+  Both can be triggered manually via `POST /api/maintenance/auto-register` (Config → Rotinas →
+  "Rodar agora"), which returns `{created, paid}`.
 - **Future expenses:** an expense created as "a pagar" gets `scheduled=true` and its
   `date` is the due date; it shows in the Overview "Próximos pagamentos" card and is
   excluded from expense totals until `paid=true`. `scheduled` stays true after payment

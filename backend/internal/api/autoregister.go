@@ -8,6 +8,36 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// autoPayScheduledAutoExpenses marks every future ("a pagar") expense with
+// payment_type=auto as paid once its due date (the expense date) has arrived.
+// This mirrors auto-debited recurring services, but for one-off expenses the
+// user scheduled as automatic. Returns how many it paid.
+func autoPayScheduledAutoExpenses(app core.App) (int, error) {
+	expenses, err := app.FindAllRecords("expenses", dbx.HashExp{"payment_type": "auto"})
+	if err != nil {
+		return 0, err
+	}
+
+	// Compare calendar dates only: an expense due today counts as due.
+	today := time.Now().Format("2006-01-02")
+	paid := 0
+	for _, e := range expenses {
+		if !e.GetBool("scheduled") || e.GetBool("paid") {
+			continue // not a pending scheduled expense
+		}
+		if e.GetDateTime("date").Time().Format("2006-01-02") > today {
+			continue // due date not reached yet
+		}
+		e.Set("paid", true)
+		if err := app.Save(e); err != nil {
+			return paid, err
+		}
+		paid++
+		app.Logger().Info("auto-paid scheduled expense", "category", e.GetString("category"))
+	}
+	return paid, nil
+}
+
 // autoRegisterAutoServices posts the monthly expense for every recurring
 // service marked payment_type=auto once its due day (this month) has arrived,
 // unless a matching expense already exists. It mirrors clicking "Registrar" on

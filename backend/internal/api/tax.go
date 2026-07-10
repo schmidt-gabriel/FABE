@@ -19,18 +19,24 @@ import (
 func Register(app core.App) {
 	fxClient := fx.NewClient()
 
-	// Auto-debited recurring services post their expense on the due date: catch
-	// up once at startup, then check daily.
-	runAutoRegister := func() {
-		if _, err := autoRegisterAutoServices(app); err != nil {
+	// Auto-debited items record themselves on their due date: recurring services
+	// post their monthly expense, and expenses the user scheduled as automatic
+	// get marked paid. Catch up once at startup, then check daily.
+	runAutoRegister := func() (created int, paid int) {
+		var err error
+		if created, err = autoRegisterAutoServices(app); err != nil {
 			app.Logger().Warn("auto-register services failed", "err", err)
 		}
+		if paid, err = autoPayScheduledAutoExpenses(app); err != nil {
+			app.Logger().Warn("auto-pay expenses failed", "err", err)
+		}
+		return created, paid
 	}
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		runAutoRegister()
 		return e.Next()
 	})
-	app.Cron().MustAdd("autoRegisterServices", "0 6 * * *", runAutoRegister)
+	app.Cron().MustAdd("autoRegister", "0 6 * * *", func() { runAutoRegister() })
 
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
@@ -51,15 +57,19 @@ func Register(app core.App) {
 			}).Bind(apis.RequireAuth())
 
 			// POST /api/maintenance/auto-register
-			// Runs the auto-register routine on demand (same as the daily cron),
-			// posting expenses for any due auto-debited service. Returns how many
-			// expenses were created.
+			// Runs the auto-register routine on demand (same as the daily cron):
+			// posts expenses for any due auto-debited service and marks due
+			// scheduled auto expenses as paid. Returns {created, paid}.
 			e.Router.POST("/api/maintenance/auto-register", func(re *core.RequestEvent) error {
 				created, err := autoRegisterAutoServices(app)
 				if err != nil {
 					return apis.NewApiError(http.StatusInternalServerError, "auto-register failed", err)
 				}
-				return re.JSON(http.StatusOK, map[string]any{"created": created})
+				paid, err := autoPayScheduledAutoExpenses(app)
+				if err != nil {
+					return apis.NewApiError(http.StatusInternalServerError, "auto-pay failed", err)
+				}
+				return re.JSON(http.StatusOK, map[string]any{"created": created, "paid": paid})
 			}).Bind(apis.RequireAuth())
 
 			// GET /api/fx/usd-brl?date=YYYY-MM-DD (date optional => latest)

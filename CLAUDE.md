@@ -29,7 +29,7 @@ backend/
       tax.go                    # /api/tax/compute, /api/tax/lock|unlock, /api/fx, Register()
       tax_periods.go            # quarterly assessment + auto-lock state machine
       export.go                 # /api/export/* and /api/import/backup
-      hooks.go                  # record hooks (auto-create expense on paid tax)
+      autoregister.go           # auto-debited recurring services post their expense
 frontend/
   src/pages/                    # Overview, Remittances, Imports, Expenses,
                                 # ProfitDistributions, Taxes, Config, Export, Login
@@ -82,8 +82,7 @@ convert_day, rate, amount_brl), `expenses` (date, category free text, amount, no
 paid, payment_type auto|manual),
 `recurring_services` (name, exp_day, default_amount, payment_type auto|manual),
 `profit_distributions` (month, amount, cota_irrf),
-`tax_periods` (year, quarter, snapshot fields, locked), `other_taxes` (name, reference,
-due_date, amount, paid, expense_id), `settings` (singleton, tax params).
+`tax_periods` (year, quarter, snapshot fields, locked), `settings` (singleton, tax params).
 
 Platform is free text sourced from the `platforms` collection (not a fixed enum), so
 new platforms can be added in Config.
@@ -125,8 +124,11 @@ new platforms can be added in Config.
   excluded from expense totals until `paid=true`. `scheduled` stays true after payment
   so the card keeps showing it as "pago". Regular expenses (`scheduled=false`) are
   always treated as paid.
-- **Other taxes** marked paid auto-create an expense (category "Outros"), linked via
-  `expense_id`; unmarking deletes it (hook in `hooks.go`).
+- **One-off taxes** (TFE, IPTU, DARF avulso, ...) are plain expenses, not a separate
+  collection: create them in Despesas, as "a pagar" when still due. The old
+  `other_taxes` collection was dropped (its records were converted to expenses by
+  `migrations/1751890000_drop_other_taxes.go`). The Impostos page only covers the
+  quarterly IRPJ/CSLL assessment.
 
 ## Conventions
 

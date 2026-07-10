@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
-import type { Expense, OtherTax, RecurringService } from "../lib/types";
+import type { Expense, RecurringService } from "../lib/types";
 import { EXPENSE_CATEGORIES, expensePaid, paymentLabel } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
@@ -14,11 +13,9 @@ export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
     sort: "-date",
   });
-  // Sources of the Overview "Próximos pagamentos" card, mirrored here as
-  // read-only "a pagar" rows until their expense exists.
+  // Recurring services show as "a pagar" rows until their expense exists,
+  // mirroring the Overview "Próximos pagamentos" card.
   const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
-  const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
-  const qc = useQueryClient();
   // Year + month come from the sidebar selectors.
   const { year, month } = useYear();
   const [open, setOpen] = useState(false);
@@ -61,22 +58,14 @@ export default function Expenses() {
     setRegistering(false);
     setOpen(true);
   }
-  // "Registrar" on an upcoming row. A tax is paid by flipping its `paid` flag,
-  // which makes the backend hook auto-create the linked expense (so we must
-  // not create one here). A service opens the new-expense modal pre-filled as
-  // paid today. Either way the pending row disappears once its expense exists.
-  async function registerUpcoming(u: {
-    taxId?: string;
+  // "Registrar" on an upcoming service row: opens the new-expense modal
+  // pre-filled as paid today, which removes the pending row once saved.
+  function registerUpcoming(u: {
     category: string;
     notes: string;
     amount: number;
     payment_type: string;
   }) {
-    if (u.taxId) {
-      await taxes.update.mutateAsync({ id: u.taxId, data: { paid: true } });
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      return;
-    }
     setEditing(null);
     setForm({
       date: today,
@@ -114,10 +103,8 @@ export default function Expenses() {
   const inYear = (list.data ?? []).filter((x) => x.date.slice(0, 4) === String(year));
   const rows = inYear.filter((x) => x.date.slice(5, 7) === month);
 
-  // Items from the Overview "Próximos pagamentos" card without an expense in
-  // the selected month yet: unpaid recurring services and pending other taxes.
-  // Both get a "Registrar" shortcut; taxes carry `taxId` so registering marks
-  // the tax paid (its expense is auto-created by the backend hook).
+  // Recurring services without an expense in the selected month yet. Each gets
+  // a "Registrar" shortcut that creates the matching expense.
   const ym = `${year}-${month}`;
   const servicePaid = (name: string) =>
     inYear.some(
@@ -126,30 +113,17 @@ export default function Expenses() {
         x.category.toUpperCase() === name.toUpperCase() &&
         x.date.slice(5, 7) === month,
     );
-  const upcoming = [
-    ...(services.list.data ?? [])
-      .filter((s) => !servicePaid(s.name))
-      .map((s) => ({
-        key: `svc-${s.id}`,
-        taxId: undefined as string | undefined,
-        date: `${ym}-${String(s.exp_day).padStart(2, "0")}`,
-        category: s.name,
-        notes: "",
-        amount: s.default_amount ?? 0,
-        payment_type: s.payment_type === "auto" ? "auto" : "manual",
-      })),
-    ...(taxes.list.data ?? [])
-      .filter((t) => !t.paid && t.due_date.slice(0, 7) === ym)
-      .map((t) => ({
-        key: `tax-${t.id}`,
-        taxId: t.id,
-        date: t.due_date.slice(0, 10),
-        category: "Outros",
-        notes: `${t.name} (imposto)`,
-        amount: t.amount,
-        payment_type: "manual",
-      })),
-  ].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const upcoming = (services.list.data ?? [])
+    .filter((s) => !servicePaid(s.name))
+    .map((s) => ({
+      key: `svc-${s.id}`,
+      date: `${ym}-${String(s.exp_day).padStart(2, "0")}`,
+      category: s.name,
+      notes: "",
+      amount: s.default_amount ?? 0,
+      payment_type: s.payment_type === "auto" ? "auto" : "manual",
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const total = rows.filter(expensePaid).reduce((s, x) => s + x.amount, 0);
   const pendingTotal =

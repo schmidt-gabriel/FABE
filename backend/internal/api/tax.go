@@ -19,8 +19,6 @@ import (
 func Register(app core.App) {
 	fxClient := fx.NewClient()
 
-	registerHooks(app)
-
 	// Auto-debited recurring services post their expense on the due date: catch
 	// up once at startup, then check daily.
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
-import type { Client, Expense, ImportRecord, OtherTax, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
+import type { Client, Expense, ImportRecord, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
 import { expensePaid } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card } from "../components/ui";
@@ -382,7 +382,6 @@ export default function Overview() {
 function UpcomingPayments({ ym }: { ym: string }) {
   const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
   const expenses = useCollection<Expense>("expenses", { sort: "-date" });
-  const taxes = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
 
   const now = new Date();
   const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -396,10 +395,6 @@ function UpcomingPayments({ ym }: { ym: string }) {
         e.category.toUpperCase() === name.toUpperCase() &&
         e.date.slice(0, 7) === ym,
     );
-
-  // Everything in "Outros impostos" (other_taxes) due in the selected month,
-  // each carrying its own paid flag and amount.
-  const monthTaxes = (taxes.list.data ?? []).filter((t) => t.due_date.slice(0, 7) === ym);
 
   // One-off future expenses (despesas a pagar) due in the selected month;
   // they keep showing here as "pago" after being marked as paid.
@@ -415,14 +410,6 @@ function UpcomingPayments({ ym }: { ym: string }) {
       amount: 0,
       paid: paidThisMonth(s.name),
       auto: s.payment_type === "auto",
-    })),
-    ...monthTaxes.map((t) => ({
-      key: t.id,
-      name: t.name,
-      day: Number(t.due_date.slice(8, 10)),
-      amount: t.amount,
-      paid: !!t.paid,
-      auto: false,
     })),
     ...monthScheduled.map((e) => ({
       key: e.id,

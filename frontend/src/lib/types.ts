@@ -78,15 +78,6 @@ export interface RecurringService extends BaseRecord {
   payment_type?: "auto" | "manual";
 }
 
-export interface OtherTax extends BaseRecord {
-  name: string;
-  reference?: string;
-  due_date: string;
-  amount: number;
-  paid?: boolean;
-  notes?: string;
-}
-
 export const EXPENSE_CATEGORIES = [
   "Unimed",
   "Internet",

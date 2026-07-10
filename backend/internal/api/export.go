@@ -24,7 +24,6 @@ var exportable = []string{
 	"recurring_services",
 	"profit_distributions",
 	"tax_periods",
-	"other_taxes",
 	"settings",
 }
 

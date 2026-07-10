@@ -1,10 +1,7 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { pb, brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
-import { useCollection } from "../lib/useCollection";
+import { pb, brl, fmtDate } from "../lib/pb";
 import { useYear } from "../lib/year";
-import type { OtherTax } from "../lib/types";
-import { Button, Card, Field, Input, Modal } from "../components/ui";
+import { Button, Card } from "../components/ui";
 
 type Quarter = {
   quarter: number;
@@ -54,60 +51,17 @@ export default function Taxes() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tax", year] }),
   });
 
-  const others = useCollection<OtherTax>("other_taxes", { sort: "due_date" });
-  const [taxOpen, setTaxOpen] = useState(false);
-  const [editingTax, setEditingTax] = useState<OtherTax | null>(null);
-  const emptyTax = { name: "", reference: "", due_date: "", amount: "", notes: "", paid: false };
-  const [taxForm, setTaxForm] = useState<Record<string, unknown>>(emptyTax);
-
-  function openTax() {
-    setEditingTax(null);
-    setTaxForm(emptyTax);
-    setTaxOpen(true);
-  }
-  function editTax(t: OtherTax) {
-    setEditingTax(t);
-    setTaxForm({
-      name: t.name,
-      reference: toDateInput(t.reference),
-      due_date: toDateInput(t.due_date),
-      amount: String(t.amount),
-      notes: t.notes ?? "",
-      paid: t.paid ?? false,
-    });
-    setTaxOpen(true);
-  }
-  async function submitTax(e: React.FormEvent) {
-    e.preventDefault();
-    const data = {
-      name: taxForm.name,
-      reference: taxForm.reference ? fromDateInput(taxForm.reference as string) : "",
-      due_date: fromDateInput(taxForm.due_date as string),
-      amount: Number(taxForm.amount),
-      notes: taxForm.notes,
-      paid: taxForm.paid,
-    };
-    if (editingTax) await others.update.mutateAsync({ id: editingTax.id, data });
-    else await others.create.mutateAsync(data);
-    setTaxOpen(false);
-  }
-  const othersOfYear = (others.list.data ?? []).filter((t) => t.due_date.slice(0, 4) === String(year));
-
-  // Next payment = nearest upcoming obligation among forecast quarters and
-  // unpaid other taxes.
+  // Next payment = nearest upcoming quarterly DARF still in forecast. One-off
+  // taxes (TFE, IPTU, ...) are plain expenses now, tracked in Despesas.
   const next = (() => {
-    const obligations = [
-      ...(data?.quarters ?? [])
-        .filter((q) => q.status === "forecast" && q.total > 0)
-        .map((q) => ({
-          label: `Imposto T${q.quarter} (${QUARTER_MONTHS[q.quarter - 1]})`,
-          due: q.due_date,
-          amount: q.total,
-        })),
-      ...othersOfYear
-        .filter((t) => !t.paid)
-        .map((t) => ({ label: t.name, due: t.due_date.slice(0, 10), amount: t.amount })),
-    ].sort((a, b) => a.due.localeCompare(b.due));
+    const obligations = (data?.quarters ?? [])
+      .filter((q) => q.status === "forecast" && q.total > 0)
+      .map((q) => ({
+        label: `Imposto T${q.quarter} (${QUARTER_MONTHS[q.quarter - 1]})`,
+        due: q.due_date,
+        amount: q.total,
+      }))
+      .sort((a, b) => a.due.localeCompare(b.due));
     return obligations.find((o) => o.due >= today()) ?? obligations[0];
   })();
 
@@ -209,126 +163,6 @@ export default function Taxes() {
         Trimestres em aberto mostram a previsão ao vivo. Use “Destravar” para corrigir.
       </p>
 
-      <div className="flex items-center justify-between pt-2">
-        <h2 className="text-lg font-semibold">Outros impostos</h2>
-        <Button onClick={openTax}>+ Adicionar</Button>
-      </div>
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-800/50 dark:text-neutral-400">
-            <tr>
-              <th className="px-4 py-3 text-left">Imposto</th>
-              <th className="px-4 py-3 text-left">Referência</th>
-              <th className="px-4 py-3 text-left">Vencimento</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-right">Valor</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {othersOfYear.map((t) => (
-              <tr key={t.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                <td className="px-4 py-3 font-medium">{t.name}</td>
-                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
-                  {t.reference ? fmtDate(t.reference) : "—"}
-                </td>
-                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
-                  {fmtDate(t.due_date)}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      t.paid
-                        ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200"
-                        : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                    }`}
-                  >
-                    {t.paid ? "Pago" : "A pagar"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right font-semibold">{brl(t.amount)}</td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <Button
-                    variant="ghost"
-                    onClick={() => others.update.mutate({ id: t.id, data: { paid: !t.paid } })}
-                  >
-                    {t.paid ? "Desmarcar" : "Marcar pago"}
-                  </Button>
-                  <Button variant="ghost" onClick={() => editTax(t)}>
-                    Editar
-                  </Button>
-                  <Button variant="danger" onClick={() => others.remove.mutate(t.id)}>
-                    Excluir
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {othersOfYear.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
-                  Nenhum imposto avulso lançado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
-
-      {taxOpen && (
-        <Modal
-          title={editingTax ? "Editar imposto" : "Novo imposto"}
-          onClose={() => setTaxOpen(false)}
-        >
-          <form onSubmit={submitTax} className="space-y-4">
-            <Field label="Imposto">
-              <Input
-                required
-                placeholder="Ex: Taxa de Fiscalização de Estabelecimentos"
-                value={taxForm.name as string}
-                onChange={(e) => setTaxForm({ ...taxForm, name: e.target.value })}
-              />
-            </Field>
-            <Field label="Referência (competência)">
-              <Input
-                type="date"
-                value={taxForm.reference as string}
-                onChange={(e) => setTaxForm({ ...taxForm, reference: e.target.value })}
-              />
-            </Field>
-            <Field label="Vencimento">
-              <Input
-                type="date"
-                required
-                value={taxForm.due_date as string}
-                onChange={(e) => setTaxForm({ ...taxForm, due_date: e.target.value })}
-              />
-            </Field>
-            <Field label="Valor (BRL)">
-              <Input
-                type="number"
-                step="0.01"
-                required
-                value={taxForm.amount as string}
-                onChange={(e) => setTaxForm({ ...taxForm, amount: e.target.value })}
-              />
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-              <input
-                type="checkbox"
-                checked={taxForm.paid as boolean}
-                onChange={(e) => setTaxForm({ ...taxForm, paid: e.target.checked })}
-              />
-              Pago
-            </label>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setTaxOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">Salvar</Button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 }

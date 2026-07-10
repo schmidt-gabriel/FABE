@@ -21,17 +21,16 @@ func Register(app core.App) {
 
 	// Auto-debited recurring services post their expense on the due date: catch
 	// up once at startup, then check daily.
-	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		if err := autoRegisterAutoServices(app); err != nil {
+	runAutoRegister := func() {
+		if _, err := autoRegisterAutoServices(app); err != nil {
 			app.Logger().Warn("auto-register services failed", "err", err)
 		}
+	}
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		runAutoRegister()
 		return e.Next()
 	})
-	app.Cron().MustAdd("autoRegisterServices", "0 6 * * *", func() {
-		if err := autoRegisterAutoServices(app); err != nil {
-			app.Logger().Warn("auto-register services failed", "err", err)
-		}
-	})
+	app.Cron().MustAdd("autoRegisterServices", "0 6 * * *", runAutoRegister)
 
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
@@ -49,6 +48,18 @@ func Register(app core.App) {
 			}).Bind(apis.RequireAuth())
 			e.Router.POST("/api/tax/unlock", func(re *core.RequestEvent) error {
 				return setLock(app, re, false)
+			}).Bind(apis.RequireAuth())
+
+			// POST /api/maintenance/auto-register
+			// Runs the auto-register routine on demand (same as the daily cron),
+			// posting expenses for any due auto-debited service. Returns how many
+			// expenses were created.
+			e.Router.POST("/api/maintenance/auto-register", func(re *core.RequestEvent) error {
+				created, err := autoRegisterAutoServices(app)
+				if err != nil {
+					return apis.NewApiError(http.StatusInternalServerError, "auto-register failed", err)
+				}
+				return re.JSON(http.StatusOK, map[string]any{"created": created})
 			}).Bind(apis.RequireAuth())
 
 			// GET /api/fx/usd-brl?date=YYYY-MM-DD (date optional => latest)

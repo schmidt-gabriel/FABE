@@ -12,14 +12,15 @@ import (
 // service marked payment_type=auto once its due day (this month) has arrived,
 // unless a matching expense already exists. It mirrors clicking "Registrar" on
 // the due date, so auto-debited bills record themselves. Runs on startup and
-// daily via cron; only the current month is handled.
-func autoRegisterAutoServices(app core.App) error {
+// daily via cron; only the current month is handled. Returns how many expenses
+// it created.
+func autoRegisterAutoServices(app core.App) (int, error) {
 	services, err := app.FindAllRecords("recurring_services", dbx.HashExp{"payment_type": "auto"})
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(services) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	now := time.Now()
@@ -32,7 +33,7 @@ func autoRegisterAutoServices(app core.App) error {
 	// service already paid, by any route, is skipped.
 	expenses, err := app.FindAllRecords("expenses")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	done := map[string]bool{}
 	for _, e := range expenses {
@@ -47,9 +48,10 @@ func autoRegisterAutoServices(app core.App) error {
 
 	expCol, err := app.FindCollectionByNameOrId("expenses")
 	if err != nil {
-		return err
+		return 0, err
 	}
 
+	created := 0
 	for _, s := range services {
 		day := s.GetInt("exp_day")
 		if day > lastDay {
@@ -71,10 +73,11 @@ func autoRegisterAutoServices(app core.App) error {
 		exp.Set("paid", true)
 		exp.Set("scheduled", false)
 		if err := app.Save(exp); err != nil {
-			return err
+			return created, err
 		}
 		done[strings.ToUpper(name)] = true
+		created++
 		app.Logger().Info("auto-registered recurring service", "service", name)
 	}
-	return nil
+	return created, nil
 }

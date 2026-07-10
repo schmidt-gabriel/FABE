@@ -4,11 +4,13 @@ import Platforms from "./Platforms";
 import RecurringServices from "./RecurringServices";
 import Export from "./Export";
 import Account from "./Account";
+import Maintenance from "./Maintenance";
 
 const TABS = [
   { key: "clientes", label: "Clientes" },
   { key: "plataformas", label: "Plataformas" },
   { key: "vencimentos", label: "Vencimentos" },
+  { key: "rotinas", label: "Rotinas" },
   { key: "dados", label: "Dados" },
   { key: "usuario", label: "Usuário" },
 ] as const;
@@ -39,6 +41,7 @@ export default function Config() {
       {tab === "clientes" && <Clients />}
       {tab === "plataformas" && <Platforms />}
       {tab === "vencimentos" && <RecurringServices />}
+      {tab === "rotinas" && <Maintenance />}
       {tab === "dados" && <Export />}
       {tab === "usuario" && <Account />}
     </div>

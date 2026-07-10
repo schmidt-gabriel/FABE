@@ -32,14 +32,14 @@ func main() {
 	// custom business endpoints (tax computation, etc.)
 	api.Register(app)
 
-	// Optional master superuser from env (MASTER_EMAIL + MASTER_PASSWORD), so a
-	// fresh deploy can log in without the manual pbinstall step.
-	app.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
-		if err := e.Next(); err != nil {
-			return err
-		}
+	// Startup bootstrap, once the DB and migrations are ready (OnServe runs
+	// after bootstrap): the optional master superuser (MASTER_EMAIL +
+	// MASTER_PASSWORD) so a fresh deploy can log in without the pbinstall step,
+	// and a default settings record so /api/tax/* works before any import.
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		ensureMasterUser(app)
-		return nil
+		ensureSettings(app)
+		return e.Next()
 	})
 
 	// Serve the built SPA (frontend) from ./pb_public with index.html fallback.
@@ -92,4 +92,40 @@ func ensureMasterUser(app core.App) {
 		return
 	}
 	log.Printf("master user ready: %s", email)
+}
+
+// ensureSettings seeds the singleton settings record (Lucro Presumido tax
+// params) with the documented defaults when the collection is empty, so a
+// fresh DB serves /api/tax/* instead of 404-ing on a missing record. It never
+// touches an existing record, so imported/edited values are preserved. The
+// defaults match the README table (validated against the real DARFs).
+func ensureSettings(app core.App) {
+	records, err := app.FindAllRecords("settings")
+	if err != nil {
+		log.Printf("settings: %v", err)
+		return
+	}
+	if len(records) > 0 {
+		return
+	}
+
+	col, err := app.FindCollectionByNameOrId("settings")
+	if err != nil {
+		log.Printf("settings: %v", err)
+		return
+	}
+	rec := core.NewRecord(col)
+	rec.Set("irpj_presumption_reduced", 0.16)
+	rec.Set("irpj_presumption_standard", 0.32)
+	rec.Set("irpj_reduced_annual_limit", 120000.0)
+	rec.Set("irpj_rate", 0.15)
+	rec.Set("irpj_adicional_rate", 0.10)
+	rec.Set("irpj_adicional_threshold", 60000.0)
+	rec.Set("csll_presumption", 0.32)
+	rec.Set("csll_rate", 0.09)
+	if err := app.Save(rec); err != nil {
+		log.Printf("settings: %v", err)
+		return
+	}
+	log.Printf("settings seeded with default tax params")
 }

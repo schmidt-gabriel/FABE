@@ -31,7 +31,7 @@ func init() {
 			paid := t.GetBool("paid")
 			exp := core.NewRecord(expenses)
 			exp.Set("date", t.GetDateTime("due_date")) // due date for unpaid ones
-			exp.Set("category", "Impostos")
+			exp.Set("category", "IMPOSTO")
 			exp.Set("amount", t.GetFloat("amount"))
 			exp.Set("notes", t.GetString("name")+" (imposto)")
 			exp.Set("payment_type", "manual")

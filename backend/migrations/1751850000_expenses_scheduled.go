@@ -23,7 +23,7 @@ func init() {
 		if f, ok := col.Fields.GetByName("category").(*core.SelectField); ok {
 			f.Values = []string{
 				"Unimed", "Internet", "Contabilizei", "GoWork",
-				"DARF INSS", "DARF CSLL", "DARF IRPJ", "Impostos", "Outros",
+				"DARF INSS", "DARF CSLL", "DARF IRPJ", "IMPOSTO", "Outros",
 			}
 		}
 		return app.Save(col)

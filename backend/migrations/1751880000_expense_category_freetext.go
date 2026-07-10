@@ -17,7 +17,7 @@ import (
 
 var categoryEnum = []string{
 	"Unimed", "Internet", "Contabilizei", "GoWork",
-	"DARF INSS", "DARF CSLL", "DARF IRPJ", "Impostos", "Outros",
+	"DARF INSS", "DARF CSLL", "DARF IRPJ", "IMPOSTOS", "Outros",
 }
 
 func init() {

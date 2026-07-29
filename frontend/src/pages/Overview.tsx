@@ -55,6 +55,11 @@ function InvoiceFeeCard({ used }: { used: number }) {
         />
       </div>
       <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
+        {over50
+          ? `${brl(used - MONTHLY_LIMIT)} acima de ${brl(MONTHLY_LIMIT)}`
+          : `Faltam ${brl(MONTHLY_LIMIT - used)} para ${brl(MONTHLY_LIMIT)}`}
+      </p>
+      <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
         Mensalidade contábil: {brl(fee)}. Acima de {brl(MONTHLY_LIMIT)}/mês sobe para {brl(444)}.
       </p>
     </Card>

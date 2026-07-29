@@ -1,8 +1,9 @@
 # Kubernetes manifests for financeApp (backend + frontend).
 #
 # Mirrors docker-compose: the backend is PocketBase (API + SQLite in a
-# persistent volume) and the frontend is the Vite server, which proxies /api
-# and /_ to the backend, so only the frontend is exposed to the browser.
+# persistent volume) and the frontend is nginx serving the built SPA, which
+# proxies /api and /_ to the backend, so only the frontend is exposed to the
+# browser.
 #
 # Apply:   kubectl apply -f k8s.yaml
 # Images:  built and pushed by CI to ghcr.io/schmidt-gabriel/financeapp-*:latest
@@ -148,26 +149,25 @@ spec:
             - name: http
               containerPort: 5173
           env:
-            # In-cluster backend address for the Vite proxy (/api, /_).
+            # In-cluster backend address for the nginx proxy (/api, /_).
+            # Substituted into the config at container startup.
             - name: BACKEND_URL
               value: "http://financeapp-backend:8090"
-            # Vite 6 blocks unknown Host headers. When serving via the Ingress
-            # below, set this to that host (comma-separated for several).
-            - name: ALLOWED_HOSTS
-              value: "financeapp.example.com"
           readinessProbe:
             httpGet:
               path: /
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+          # nginx serving static files: a fraction of what the Vite dev server
+          # needed.
           resources:
             requests:
-              cpu: 50m
-              memory: 128Mi
+              cpu: 10m
+              memory: 32Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 200m
+              memory: 128Mi
       # imagePullSecrets:
       #   - name: ghcr-pull
 ---

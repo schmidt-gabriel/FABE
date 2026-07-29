@@ -1,0 +1,48 @@
+# Serves the built SPA and proxies the PocketBase routes to the backend, so the
+# browser talks to a single origin. Mirrors the Vite dev proxy in vite.config.ts.
+#
+# ${BACKEND_URL} is substituted at container startup by the nginx image's
+# envsubst entrypoint (see /docker-entrypoint.d/20-envsubst-on-templates.sh).
+server {
+    listen 5173;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Hashed asset filenames: safe to cache forever.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location /api/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # PocketBase realtime is SSE: no buffering, no read timeout.
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 1d;
+        client_max_body_size 32m;
+    }
+
+    # PocketBase admin UI (/_/) and its assets.
+    location /_/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 32m;
+    }
+
+    # SPA routes (react-router): everything else falls back to index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

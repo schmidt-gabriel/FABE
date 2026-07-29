@@ -15,6 +15,11 @@ into BRL, and pays taxes under **Lucro Presumido**. Used only by the owner.
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind v4 + TanStack Query +
   react-router. PocketBase JS SDK for data.
 - **Deploy:** Docker Compose (backend `:8090`, frontend `:5173`).
+  `frontend/Dockerfile` is multi-stage: the default target is the production
+  image (nginx serving the built SPA, ~78MB) and `--target dev` is the Vite dev
+  server used by docker-compose. Both listen on 5173 and proxy `/api` and `/_`
+  to `$BACKEND_URL`, so the two are interchangeable. CI pushes the default
+  (nginx) target; the nginx proxy config lives in `frontend/nginx.conf.template`.
 
 ## Monorepo layout
 

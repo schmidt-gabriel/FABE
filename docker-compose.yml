@@ -13,9 +13,12 @@ services:
     restart: unless-stopped
 
   frontend:
+    # "dev" target: Vite with hot reload over the bind mount below. The default
+    # target of that Dockerfile is the nginx production image (what CI pushes).
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "5173:5173"
     environment:

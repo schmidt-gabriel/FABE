@@ -85,7 +85,8 @@ function MonthExpensesCard({ total }: { total: number }) {
 // Profit distribution: above R$50k/month the full month's amount is taxed at
 // 10% IRRF (alta renda). It is not a hard cap, so we show the withholding.
 function DistributionMonthCard({ used, applyIrrf }: { used: number; applyIrrf: boolean }) {
-  const over = applyIrrf && used > MONTHLY_LIMIT;
+  const overLimit = used > MONTHLY_LIMIT;
+  const over = applyIrrf && overLimit;
   const irrf = over ? used * IRRF_RATE : 0;
   const pct = Math.min(100, (used / MONTHLY_LIMIT) * 100);
   return (
@@ -110,10 +111,13 @@ function DistributionMonthCard({ used, applyIrrf }: { used: number; applyIrrf: b
         <div className={`h-full ${over ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
       </div>
       <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-        {over
-          ? `IRRF retido ~${brl(irrf)} (estimado)`
-          : `${brl(MONTHLY_LIMIT - used)} isento disponível`}{" "}
-        · isenção até {brl(MONTHLY_LIMIT)}/mês
+        {overLimit
+          ? `${brl(used - MONTHLY_LIMIT)} acima de ${brl(MONTHLY_LIMIT)}`
+          : `Faltam ${brl(MONTHLY_LIMIT - used)} para ${brl(MONTHLY_LIMIT)}`}
+      </p>
+      <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+        {over ? `IRRF retido ~${brl(irrf)} (estimado)` : "Isento"} · isenção até{" "}
+        {brl(MONTHLY_LIMIT)}/mês
       </p>
     </Card>
   );

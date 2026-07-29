@@ -1,0 +1,95 @@
+{
+  "platforms": [
+    { "id": "smpplatform0001", "name": "Deel", "active": true },
+    { "id": "smpplatform0002", "name": "Wise", "active": true },
+    { "id": "smpplatform0003", "name": "Husky", "active": false }
+  ],
+  "clients": [
+    {
+      "id": "smpclient000001",
+      "name": "Acme Corp",
+      "default_platform": "Deel",
+      "monthly_amount": 6500,
+      "billing_type": "monthly",
+      "pay_frequency": "monthly",
+      "active": true
+    },
+    {
+      "id": "smpclient000002",
+      "name": "Globex Labs",
+      "default_platform": "Wise",
+      "monthly_amount": 45,
+      "billing_type": "hourly",
+      "pay_frequency": "weekly",
+      "active": true
+    },
+    {
+      "id": "smpclient000003",
+      "name": "Initech (encerrado)",
+      "default_platform": "Husky",
+      "monthly_amount": 3000,
+      "billing_type": "monthly",
+      "pay_frequency": "monthly",
+      "active": false
+    }
+  ],
+  "remittances": [
+    { "id": "smpremittanc001", "client": "smpclient000001", "platform": "Deel", "amount_usd": 6500, "pay_day": "2026-01-05 00:00:00.000Z", "notes": "" },
+    { "id": "smpremittanc002", "client": "smpclient000002", "platform": "Wise", "amount_usd": 7200, "pay_day": "2026-01-12 00:00:00.000Z", "notes": "" },
+    { "id": "smpremittanc003", "client": "smpclient000001", "platform": "Deel", "amount_usd": 6500, "pay_day": "2026-02-05 00:00:00.000Z", "notes": "" },
+    { "id": "smpremittanc004", "client": "smpclient000002", "platform": "Wise", "amount_usd": 7200, "pay_day": "2026-02-12 00:00:00.000Z", "notes": "" },
+    { "id": "smpremittanc005", "client": "smpclient000001", "platform": "Deel", "amount_usd": 6500, "pay_day": "2026-03-05 00:00:00.000Z", "notes": "" },
+    { "id": "smpremittanc006", "client": "smpclient000002", "platform": "Wise", "amount_usd": 8400, "pay_day": "2026-03-12 00:00:00.000Z", "notes": "mes com horas extras" }
+  ],
+  "imports": [
+    { "id": "smpimport000001", "platform": "Deel", "amount_usd": 6500, "convert_day": "2026-01-08 00:00:00.000Z", "rate": 5.12, "amount_brl": 33280, "notes": "" },
+    { "id": "smpimport000002", "platform": "Wise", "amount_usd": 3000, "convert_day": "2026-01-15 00:00:00.000Z", "rate": 5.08, "amount_brl": 15240, "notes": "" },
+    { "id": "smpimport000003", "platform": "Deel", "amount_usd": 6500, "convert_day": "2026-02-09 00:00:00.000Z", "rate": 5.2, "amount_brl": 33800, "notes": "" },
+    { "id": "smpimport000004", "platform": "Wise", "amount_usd": 2800, "convert_day": "2026-02-16 00:00:00.000Z", "rate": 5.25, "amount_brl": 14700, "notes": "abaixo dos R$50k no mes" },
+    { "id": "smpimport000005", "platform": "Deel", "amount_usd": 9000, "convert_day": "2026-03-06 00:00:00.000Z", "rate": 5.3, "amount_brl": 47700, "notes": "" },
+    { "id": "smpimport000006", "platform": "Wise", "amount_usd": 3000, "convert_day": "2026-03-18 00:00:00.000Z", "rate": 5.28, "amount_brl": 15840, "notes": "mes acima de R$50k: mensalidade contabil sobe" }
+  ],
+  "expenses": [
+    { "id": "smpexpense00001", "date": "2026-01-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00002", "date": "2026-01-10 00:00:00.000Z", "category": "UNIMED", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00003", "date": "2026-01-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 295, "notes": "", "scheduled": false, "paid": true, "payment_type": "manual" },
+    { "id": "smpexpense00004", "date": "2026-01-20 00:00:00.000Z", "category": "IMPOSTO", "amount": 712.33, "notes": "DARF INSS pro-labore", "scheduled": false, "paid": true, "payment_type": "manual" },
+    { "id": "smpexpense00005", "date": "2026-02-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00006", "date": "2026-02-10 00:00:00.000Z", "category": "UNIMED", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00007", "date": "2026-02-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 295, "notes": "", "scheduled": false, "paid": true, "payment_type": "manual" },
+    { "id": "smpexpense00008", "date": "2026-03-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00009", "date": "2026-03-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 444, "notes": "faixa R$50k-100k", "scheduled": false, "paid": true, "payment_type": "manual" },
+    { "id": "smpexpense00010", "date": "2026-03-25 00:00:00.000Z", "category": "TFE", "amount": 380.12, "notes": "taxa avulsa ainda a pagar", "scheduled": true, "paid": false, "payment_type": "manual" },
+    { "id": "smpexpense00011", "date": "2026-04-30 00:00:00.000Z", "category": "IMPOSTO", "amount": 5231.4, "notes": "DARF IRPJ/CSLL T1 a pagar", "scheduled": true, "paid": false, "payment_type": "manual" }
+  ],
+  "recurring_services": [
+    { "id": "smpservice00001", "name": "INTERNET", "exp_day": 10, "default_amount": 149.9, "payment_type": "auto" },
+    { "id": "smpservice00002", "name": "UNIMED", "exp_day": 10, "default_amount": 620.45, "payment_type": "auto" },
+    { "id": "smpservice00003", "name": "CONTABILIDADE", "exp_day": 15, "default_amount": 295, "payment_type": "manual" },
+    { "id": "smpservice00004", "name": "COWORKING", "exp_day": 14, "default_amount": 890, "payment_type": "manual" }
+  ],
+  "profit_distributions": [
+    { "id": "smpprofitdis001", "month": "2026-01-01 00:00:00.000Z", "amount": 28000, "cota_irrf": 0, "notes": "abaixo de R$50k: isento" },
+    { "id": "smpprofitdis002", "month": "2026-02-01 00:00:00.000Z", "amount": 32000, "cota_irrf": 0, "notes": "" },
+    { "id": "smpprofitdis003", "month": "2026-03-01 00:00:00.000Z", "amount": 58000, "cota_irrf": 5800, "notes": "acima de R$50k: IRRF 10% sobre o mes inteiro" }
+  ],
+  "tax_periods": [],
+  "settings": [
+    {
+      "id": "smpsettings0001",
+      "company_name": "Empresa Exemplo LTDA",
+      "cnpj": "00.000.000/0001-00",
+      "irpj_presumption_reduced": 0.16,
+      "irpj_presumption_standard": 0.32,
+      "irpj_reduced_annual_limit": 120000,
+      "irpj_rate": 0.15,
+      "irpj_adicional_rate": 0.1,
+      "irpj_adicional_threshold": 60000,
+      "csll_presumption": 0.32,
+      "csll_rate": 0.09,
+      "inss_monthly": 712.33,
+      "dollar_rate": 5.25,
+      "dollar_rate_at": "2026-03-31 00:00:00.000Z"
+    }
+  ]
+}

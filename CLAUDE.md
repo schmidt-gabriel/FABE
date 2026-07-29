@@ -61,17 +61,28 @@ vars: on every startup `main.go` upserts a superuser with those credentials
 ### Working with data / resetting
 
 Real data (2023-2026) lives outside the repo in
-`/Users/gabriel/Code/Personal/backup.json` (gitignored patterns cover it). After
-tests that mutate data, reload it: Config → Dados → Importar backup →
+`/Users/gabriel/Documents/Work/CNPJ/backup.json` (gitignored patterns cover it).
+After tests that mutate data, reload it: Config → Dados → Importar backup →
 Sobrescrever tudo (upload `backup.json`), or:
 
 ```bash
 curl -s -X POST "http://localhost:8090/api/import/backup?mode=overwrite" \
   -H "Authorization: $TOKEN" -H "Content-Type: application/json" \
-  --data-binary @/Users/gabriel/Code/Personal/backup.json
+  --data-binary @/Users/gabriel/Documents/Work/CNPJ/backup.json
 ```
 
 Regenerate it from the running DB: `GET /api/export/backup` piped to the file.
+
+**`sample_data.json`** (in the repo root) is a small synthetic dataset in the same
+format, for testing without touching real numbers. It covers both sides of the
+R$50k thresholds: Feb/2026 invoices R$48.5k (below) and Mar/2026 R$63.5k (above),
+Jan+Feb distributions below R$50k and Mar above (IRRF 10%). Import it the same way:
+
+```bash
+curl -s -X POST "http://localhost:8090/api/import/backup?mode=overwrite" \
+  -H "Authorization: $TOKEN" -H "Content-Type: application/json" \
+  --data-binary @sample_data.json
+```
 
 ## Collections
 

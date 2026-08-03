@@ -54,6 +54,11 @@ export function useSelectedMonth() {
 // has left over, so when the card beside it is taller the slack ends up inside
 // the card instead of as a gap between the card and its chart.
 const CARD_H = "min-h-[168px] grow";
+// Half-height floor for the meters that are a single number with no bar
+// (Despesas, Última importação): they had nothing to fill the tall box with.
+// They still `grow`, so a taller neighbour in the same row is matched by the
+// card and never by a gap above the chart.
+const CARD_H_SM = "min-h-[84px] grow";
 
 // One cell of the year strip.
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -74,6 +79,7 @@ function Meter({
   pct,
   over,
   hint,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -81,9 +87,10 @@ function Meter({
   pct?: number;
   over?: boolean;
   hint: string;
+  compact?: boolean;
 }) {
   return (
-    <Card className={`flex ${CARD_H} flex-col p-4`}>
+    <Card className={`flex ${compact ? CARD_H_SM : CARD_H} flex-col p-4`}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
         {badge && (
@@ -299,7 +306,7 @@ export function ExpensesMeter() {
     ym,
     (r) => r.date,
   );
-  return <Meter label={`Despesas · ${monthName}`} value={brl(spent)} hint="Pagas no mês" />;
+  return <Meter compact label={`Despesas · ${monthName}`} value={brl(spent)} hint="Pagas no mês" />;
 }
 
 // Sits above the effective-rate chart: the conversion that produced the last
@@ -311,6 +318,7 @@ export function LastImport() {
   if (!last) {
     return (
       <Meter
+        compact
         label="Última importação"
         value="—"
         hint={`nenhuma conversão registrada em ${year}`}
@@ -320,6 +328,7 @@ export function LastImport() {
   const effective = last.amount_usd > 0 ? last.amount_brl / last.amount_usd : 0;
   return (
     <Meter
+      compact
       label={`Última importação · ${fmtDate(last.convert_day)}`}
       value={brl(last.amount_brl)}
       hint={`${usd(last.amount_usd)}${effective ? ` a ${effective.toFixed(4)}` : ""}${

@@ -68,12 +68,9 @@ function barPath(x: number, y: number, w: number, h: number, round: boolean) {
 
 const axisText = "fill-[var(--viz-muted)] text-[11px]";
 
-function Empty({ height }: { height: number }) {
+function Empty() {
   return (
-    <div
-      className="flex items-center justify-center text-sm text-neutral-400 dark:text-neutral-500"
-      style={{ height }}
-    >
+    <div className="flex h-full items-center justify-center text-sm text-neutral-400 dark:text-neutral-500">
       Sem dados no período
     </div>
   );
@@ -87,6 +84,8 @@ function ChartFrame({
   series,
   data,
   format,
+  height,
+  grow = false,
   className = "",
   children,
 }: {
@@ -95,12 +94,14 @@ function ChartFrame({
   series: Series[];
   data: Datum[];
   format: (v: number) => string;
+  height: number;
+  grow?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const [table, setTable] = useState(false);
   return (
-    <Card className={`viz p-4 ${className}`}>
+    <Card className={`viz ${grow ? "flex h-full flex-col " : ""}p-4 ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{title}</h2>
@@ -131,9 +132,17 @@ function ChartFrame({
           ))}
       </div>
 
-      <div className="mt-2">
+      {/* The body is a fixed box, so switching to "Tabela" swaps what is inside
+          it without changing the card height and knocking the grid row out of
+          line. A longer table scrolls in place. The box is the svg's own aspect
+          ratio, or, when the chart stands alone in its cell (`grow`), whatever
+          height the row gives it. */}
+      <div
+        className={`mt-2 ${grow ? "min-h-0 flex-1" : ""}`}
+        style={grow ? undefined : { aspectRatio: `${W} / ${height}` }}
+      >
         {table ? (
-          <div className="max-h-72 overflow-auto">
+          <div className="h-full overflow-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-neutral-400 dark:text-neutral-500">
                 <tr>
@@ -182,6 +191,7 @@ export function ColumnChart({
   stacked = false,
   threshold,
   height = 210,
+  grow = false,
   className,
 }: {
   title: string;
@@ -193,6 +203,7 @@ export function ColumnChart({
   stacked?: boolean;
   threshold?: { value: number; label: string };
   height?: number;
+  grow?: boolean;
   className?: string;
 }) {
   const [tip, setTip] = useState<Tip | null>(null);
@@ -221,13 +232,15 @@ export function ColumnChart({
       series={series}
       data={data}
       format={format}
+      height={height}
+      grow={grow}
       className={className}
     >
       {!data.length ? (
-        <Empty height={height} />
+        <Empty />
       ) : (
-        <div className="relative" onPointerLeave={() => setTip(null)}>
-          <svg viewBox={`0 0 ${W} ${height}`} className="block h-auto w-full" role="img">
+        <div className="relative h-full" onPointerLeave={() => setTip(null)}>
+          <svg viewBox={`0 0 ${W} ${height}`} className="block h-full w-full" role="img">
             {ticks.map((t) => (
               <g key={t}>
                 <line
@@ -365,6 +378,7 @@ export function BarChart({
   color,
   format,
   height = 210,
+  grow = false,
   className,
 }: {
   title: string;
@@ -373,6 +387,7 @@ export function BarChart({
   color: string;
   format: (v: number) => string;
   height?: number;
+  grow?: boolean;
   className?: string;
 }) {
   const series: Series[] = [{ key: "v", label: "Valor", color }];
@@ -391,12 +406,14 @@ export function BarChart({
       series={series}
       data={data}
       format={format}
+      height={height}
+      grow={grow}
       className={className}
     >
       {!data.length ? (
-        <Empty height={160} />
+        <Empty />
       ) : (
-        <svg viewBox={`0 0 ${W} ${height}`} className="block h-auto w-full" role="img">
+        <svg viewBox={`0 0 ${W} ${height}`} className="block h-full w-full" role="img">
           {data.map((d, i) => {
             const v = d.values[0] ?? 0;
             const w = (v / peak) * plotW;
@@ -439,6 +456,7 @@ export function LineChart({
   format,
   tick,
   height = 210,
+  grow = false,
   reference,
   className,
 }: {
@@ -450,6 +468,7 @@ export function LineChart({
   format: (v: number) => string;
   tick: (v: number) => string;
   height?: number;
+  grow?: boolean;
   // A rule across the plot (the current market quote, next to the effective
   // rates the imports actually converted at). Unlabelled inside the plot: the
   // subtitle says what it is.
@@ -482,13 +501,15 @@ export function LineChart({
       series={series}
       data={data}
       format={format}
+      height={height}
+      grow={grow}
       className={className}
     >
       {!data.length ? (
-        <Empty height={height} />
+        <Empty />
       ) : (
-        <div className="relative" onPointerLeave={() => setHover(null)}>
-          <svg viewBox={`0 0 ${W} ${height}`} className="block h-auto w-full" role="img">
+        <div className="relative h-full" onPointerLeave={() => setHover(null)}>
+          <svg viewBox={`0 0 ${W} ${height}`} className="block h-full w-full" role="img">
             {ticks.map((t) => (
               <g key={t}>
                 <line

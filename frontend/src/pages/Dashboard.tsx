@@ -260,8 +260,15 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* The last two month cards are single numbers with no bar, so they
+            share one cell side by side instead of taking a column each. Their
+            two charts keep a column each: the one left without a card on top
+            grows to the row's height rather than leaving a gap. */}
         <div className="flex h-full flex-col gap-4">
-          <ExpensesMeter />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ExpensesMeter />
+            <LastImport />
+          </div>
           <BarChart
             className="mt-auto"
             title="Despesas por categoria"
@@ -273,9 +280,8 @@ export default function Dashboard() {
         </div>
 
         <div className="flex h-full flex-col gap-4">
-          <LastImport />
           <LineChart
-            className="mt-auto"
+            grow
             title="Cotação efetiva das importações"
             subtitle={`BRL recebido ÷ USD enviado, com taxas${
               avgRate ? ` · média ${avgRate.toFixed(4)}` : ""

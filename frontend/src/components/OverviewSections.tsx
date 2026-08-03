@@ -48,13 +48,12 @@ export function useSelectedMonth() {
   };
 }
 
-// Every card that sits on top of a chart uses this height, so the cells of the
-// grid line up: the meters stretch into it, the lists scroll inside it.
 // Shared floor for the cards that sit on top of a chart: the short ones (the
-// meters) all render at exactly this height, and a longer list grows past it
-// instead of scrolling. The charts below are pinned to the bottom of the cell,
-// so the row still lines up.
-const CARD_H = "min-h-[168px]";
+// meters) all render at least this tall, and a longer list grows past it
+// instead of scrolling. `grow` makes each card take whatever height its cell
+// has left over, so when the card beside it is taller the slack ends up inside
+// the card instead of as a gap between the card and its chart.
+const CARD_H = "min-h-[168px] grow";
 
 // One cell of the year strip.
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {

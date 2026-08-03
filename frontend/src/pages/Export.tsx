@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { pb } from "../lib/pb";
 import { Button, Card, Modal } from "../components/ui";
 
@@ -30,10 +31,37 @@ async function download(path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// Check inside a circle, drawn inline like the rest of the app's few icons.
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0 fill-current"
+    >
+      <path d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm4.03 6.28-4.75 4.75a.75.75 0 0 1-1.06 0L5.97 10.28a.75.75 0 1 1 1.06-1.06l1.72 1.72 4.22-4.22a.75.75 0 1 1 1.06 1.06Z" />
+    </svg>
+  );
+}
+
+// How long the success message stays on screen before the modal closes on its
+// own: enough to read the count, short enough not to need a click.
+const CLOSE_DELAY_MS = 1600;
+
 function ImportModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState("");
+  const [done, setDone] = useState(false);
+
+  // Closes itself once the import succeeded, so the confirmation is the last
+  // thing seen instead of a modal waiting to be dismissed.
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(onClose, CLOSE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [done, onClose]);
 
   async function runImport(mode: "overwrite" | "append") {
     if (!file) {
@@ -64,6 +92,10 @@ function ImportModal({ onClose }: { onClose: () => void }) {
       setMsg(
         `${total} registro(s) importado(s) (${mode === "overwrite" ? "substituição completa" : "adição"}).`,
       );
+      setDone(true);
+      // Every collection was just replaced under the app's feet; drop the
+      // cached lists so the pages behind the modal show the imported data.
+      qc.invalidateQueries();
     } catch (e) {
       setMsg("Erro: " + (e as Error).message);
     } finally {
@@ -83,6 +115,7 @@ function ImportModal({ onClose }: { onClose: () => void }) {
           onChange={(e) => {
             setFile(e.target.files?.[0] ?? null);
             setMsg("");
+            setDone(false);
           }}
           className="block w-full text-sm text-neutral-600 file:mr-3 file:rounded-lg file:border-0 file:bg-neutral-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-neutral-800 dark:text-neutral-400 dark:file:bg-neutral-100 dark:file:text-neutral-900"
         />
@@ -90,7 +123,23 @@ function ImportModal({ onClose }: { onClose: () => void }) {
           <strong>Adicionar:</strong> insere registros novos, mantendo os existentes.{" "}
           <strong>Sobrescrever:</strong> apaga tudo e substitui pelo backup.
         </p>
-        {msg && <p className="text-sm text-neutral-700 dark:text-neutral-300">{msg}</p>}
+        {msg &&
+          (done ? (
+            <p className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              <CheckIcon />
+              {msg}
+            </p>
+          ) : (
+            <p
+              className={
+                msg.startsWith("Erro")
+                  ? "text-sm text-red-600 dark:text-red-400"
+                  : "text-sm text-neutral-700 dark:text-neutral-300"
+              }
+            >
+              {msg}
+            </p>
+          ))}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={() => runImport("append")} disabled={importing}>
             {importing ? "Importando…" : "Adicionar (append)"}

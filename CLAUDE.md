@@ -123,6 +123,13 @@ new platforms can be added in Config.
 - **Imports / cotação efetiva:** enter USD sent and BRL received; effective rate =
   BRL ÷ USD (embeds platform fees like Deel's). "Estimar pelo câmbio" pre-fills BRL
   from the market rate (AwesomeAPI).
+- **FX quotes are third-party, so `/api/fx/usd-brl` tolerates failure.** AwesomeAPI has
+  no quote on weekends/holidays, so a dated lookup asks for a window ending on that date
+  and gets the previous business day back (the response `date` is the day the quote
+  really belongs to, not the one requested). Transient failures (network, 5xx, 429) are
+  retried. The undated "latest" lookup falls back to the last quote the process saw,
+  flagged `"stale": true`, so the Overview card never blanks out; a **dated** lookup has
+  no safe fallback (it feeds a stored `amount_brl`) and still returns 502.
 - **Notas fiscais R$50k:** it is the accounting fee tier threshold, not a legal cap.
   Contador's table: ≤R$50k → R$295/mês; R$50k–100k → R$444; R$100k–1M → R$622; >R$1M → R$918.
 - **Recurring services** (`recurring_services`) have a due day; on the Overview a

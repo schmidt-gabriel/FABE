@@ -180,7 +180,9 @@ export default function Overview() {
     },
   });
 
-  const fx = useQuery<{ rate: number; date: string }>({
+  // The quote comes from a third party, so a failed call is retried and the
+  // last good value is kept on screen instead of blanking the card.
+  const fx = useQuery<{ rate: number; date: string; stale?: boolean }>({
     queryKey: ["fx-latest"],
     queryFn: async () => {
       const res = await fetch(`/api/fx/usd-brl`, {
@@ -189,6 +191,8 @@ export default function Overview() {
       if (!res.ok) throw new Error("falha");
       return res.json();
     },
+    retry: 2,
+    staleTime: 5 * 60 * 1000,
   });
 
   const bruto = sum(imports.list.data, (r) => r.amount_brl, year, (r) => r.convert_day);
@@ -205,6 +209,13 @@ export default function Overview() {
   const liquido = bruto - despesas;
   const toBring = receivedUsd - importedUsd;
   const rate = fx.data?.rate ?? 0;
+  // Rate used to approximate "valor a trazer" in BRL. The market quote is
+  // preferred, but when AwesomeAPI is unreachable the effective rate of the
+  // year's own imports (BRL received ÷ USD sent, fees included) keeps the
+  // estimate on screen, and is arguably closer to what will actually land.
+  const effectiveRate = importedUsd > 0 ? bruto / importedUsd : 0;
+  const estimateRate = rate || effectiveRate;
+  const estimateSource = rate ? `cotação ${rate.toFixed(4)}` : `câmbio efetivo ${effectiveRate.toFixed(4)}`;
 
   // Monthly view (limits + due dates), driven by the sidebar year + month.
   // A month past the latest available one (this month, or December for past
@@ -312,8 +323,8 @@ export default function Overview() {
           label="Valor a trazer"
           value={usd(toBring)}
           hint={
-            rate
-              ? `≈ ${brl(toBring * rate)} (aproximado · cotação ${rate.toFixed(4)})`
+            estimateRate
+              ? `≈ ${brl(toBring * estimateRate)} (aproximado · ${estimateSource})`
               : "recebido − importado"
           }
         />
@@ -372,8 +383,14 @@ export default function Overview() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Stat
           label="Cotação atual (USD/BRL)"
-          value={rate ? rate.toFixed(4) : "—"}
-          hint={fx.data?.date ? `fonte: AwesomeAPI · ${fx.data.date}` : undefined}
+          value={rate ? rate.toFixed(4) : fx.isLoading ? "…" : "—"}
+          hint={
+            fx.data?.date
+              ? `fonte: AwesomeAPI · ${fx.data.date}${fx.data.stale ? " (desatualizada)" : ""}`
+              : fx.isError
+                ? "cotação indisponível no momento"
+                : undefined
+          }
         />
         <Stat
           label="Total recebido (remessas)"

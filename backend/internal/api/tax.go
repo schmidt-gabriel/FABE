@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
@@ -15,9 +16,33 @@ import (
 	"financeapp/backend/internal/tax"
 )
 
+// quoteCache holds the last quote AwesomeAPI returned, so a transient outage
+// degrades to a slightly old rate instead of an error.
+type quoteCache struct {
+	mu    sync.RWMutex
+	quote fx.Quote
+	ok    bool
+}
+
+func (c *quoteCache) set(q fx.Quote) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.quote, c.ok = q, true
+}
+
+// get returns the cached quote flagged as stale, and whether one was stored.
+func (c *quoteCache) get() (fx.Quote, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	q := c.quote
+	q.Stale = true
+	return q, c.ok
+}
+
 // Register binds all custom routes to the app.
 func Register(app core.App) {
 	fxClient := fx.NewClient()
+	latestFX := &quoteCache{}
 
 	// Auto-debited items record themselves on their due date: recurring services
 	// post their monthly expense, and expenses the user scheduled as automatic
@@ -75,9 +100,23 @@ func Register(app core.App) {
 			// GET /api/fx/usd-brl?date=YYYY-MM-DD (date optional => latest)
 			// Returns the USD/BRL exchange rate, used to pre-fill imports.
 			e.Router.GET("/api/fx/usd-brl", func(re *core.RequestEvent) error {
-				quote, err := fxClient.Fetch(re.Request.Context(), re.Request.URL.Query().Get("date"))
+				date := re.Request.URL.Query().Get("date")
+				quote, err := fxClient.Fetch(re.Request.Context(), date)
 				if err != nil {
+					// The current rate is informational, so an AwesomeAPI outage
+					// falls back to the last one we saw rather than blanking the
+					// Overview card. A dated lookup has no safe fallback: it feeds
+					// a stored amount, so it must fail loudly.
+					if date == "" {
+						if cached, ok := latestFX.get(); ok {
+							app.Logger().Warn("fx upstream failed, serving cached quote", "err", err)
+							return re.JSON(http.StatusOK, cached)
+						}
+					}
 					return apis.NewApiError(http.StatusBadGateway, "could not fetch exchange rate", err)
+				}
+				if date == "" {
+					latestFX.set(quote)
 				}
 				return re.JSON(http.StatusOK, quote)
 			}).Bind(apis.RequireAuth())

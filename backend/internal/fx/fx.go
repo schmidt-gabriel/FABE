@@ -4,6 +4,7 @@ package fx
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,11 +14,29 @@ import (
 
 const baseURL = "https://economia.awesomeapi.com.br/json"
 
+// lookbackDays is how far fetchByDate walks back when the requested date has no
+// quote of its own (weekend, holiday): the window ends on the requested date and
+// AwesomeAPI answers with the most recent quote at or before it.
+const lookbackDays = 10
+
+// maxAttempts is the number of tries per request. AwesomeAPI occasionally drops
+// a request or rate-limits; one retry turns that into a slower answer instead of
+// a failure.
+const maxAttempts = 3
+
+// retryDelay is the pause between attempts.
+var retryDelay = 300 * time.Millisecond
+
 // Quote is a single USD/BRL exchange rate observation.
 type Quote struct {
-	Rate   float64 `json:"rate"`
-	Date   string  `json:"date"`   // YYYY-MM-DD
-	Source string  `json:"source"` // "awesomeapi"
+	Rate float64 `json:"rate"`
+	// Date is the day the quote actually refers to, which for a weekend or
+	// holiday request is the previous business day.
+	Date   string `json:"date"`   // YYYY-MM-DD
+	Source string `json:"source"` // "awesomeapi"
+	// Stale marks a quote served from the last-known-good cache because
+	// AwesomeAPI was unreachable.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // Client fetches quotes. The HTTP client and base URL are injectable for tests.
@@ -60,33 +79,86 @@ func (c *Client) fetchByDate(ctx context.Context, date string) (Quote, error) {
 	if err != nil {
 		return Quote{}, fmt.Errorf("invalid date %q: %w", date, err)
 	}
-	ymd := d.Format("20060102")
-	url := fmt.Sprintf("%s/daily/USD-BRL/?start_date=%s&end_date=%s", c.BaseURL, ymd, ymd)
+	// There is no quote on weekends and holidays, so ask for a window ending on
+	// the requested date rather than for that single day: the endpoint returns
+	// the most recent quote in the range, i.e. the previous business day.
+	start := d.AddDate(0, 0, -lookbackDays).Format("20060102")
+	end := d.Format("20060102")
+	url := fmt.Sprintf("%s/daily/USD-BRL/?start_date=%s&end_date=%s", c.BaseURL, start, end)
 	body, err := c.get(ctx, url)
 	if err != nil {
 		return Quote{}, err
 	}
-	rate, err := parseDaily(body)
+	rate, ts, err := parseDaily(body)
 	if err != nil {
 		return Quote{}, err
 	}
-	return Quote{Rate: rate, Date: date, Source: "awesomeapi"}, nil
+	// Report the day the quote belongs to, which may be earlier than requested.
+	quoteDate := date
+	if ts > 0 {
+		quoteDate = time.Unix(ts, 0).Format("2006-01-02")
+	}
+	return Quote{Rate: rate, Date: quoteDate, Source: "awesomeapi"}, nil
 }
 
+// get fetches url, retrying transient failures (network errors, 5xx, 429). A
+// 4xx other than 429 is a permanent answer and fails on the first attempt.
 func (c *Client) get(ctx context.Context, url string) ([]byte, error) {
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(retryDelay):
+			}
+		}
+		body, err := c.getOnce(ctx, url)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+		if !isTransient(err) {
+			break
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *Client) getOnce(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, err
+		// Connection-level failure: worth another try.
+		return nil, transientError{err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("awesomeapi returned status %d", resp.StatusCode)
+		err := fmt.Errorf("awesomeapi returned status %d", resp.StatusCode)
+		if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
+			return nil, transientError{err}
+		}
+		return nil, err
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, transientError{err}
+	}
+	return body, nil
+}
+
+// transientError marks a failure that may succeed if retried.
+type transientError struct{ err error }
+
+func (e transientError) Error() string { return e.err.Error() }
+func (e transientError) Unwrap() error { return e.err }
+
+func isTransient(err error) bool {
+	var t transientError
+	return errors.As(err, &t)
 }
 
 // parseLast extracts the bid from the /last/USD-BRL response shape:
@@ -105,17 +177,24 @@ func parseLast(body []byte) (float64, error) {
 	return strconv.ParseFloat(q.Bid, 64)
 }
 
-// parseDaily extracts the bid from the /daily/USD-BRL response shape:
-// [{"bid":"5.15", ...}, ...]
-func parseDaily(body []byte) (float64, error) {
+// parseDaily extracts the bid and unix timestamp of the most recent entry of
+// the /daily/USD-BRL response shape, which comes ordered newest first:
+// [{"bid":"5.15","timestamp":"1785531571", ...}, ...]
+func parseDaily(body []byte) (float64, int64, error) {
 	var out []struct {
-		Bid string `json:"bid"`
+		Bid       string `json:"bid"`
+		Timestamp string `json:"timestamp"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if len(out) == 0 {
-		return 0, fmt.Errorf("no quote available for the requested date")
+		return 0, 0, fmt.Errorf("no quote available for the requested date")
 	}
-	return strconv.ParseFloat(out[0].Bid, 64)
+	rate, err := strconv.ParseFloat(out[0].Bid, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+	ts, _ := strconv.ParseInt(out[0].Timestamp, 10, 64)
+	return rate, ts, nil
 }

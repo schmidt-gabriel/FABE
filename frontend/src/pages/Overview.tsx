@@ -4,13 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
-import { expensePaid } from "../lib/types";
+import { expensePaid, IRRF_MONTHLY_LIMIT, IRRF_START_YEAR, suggestedIrrf } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
 import { Button, Card } from "../components/ui";
-const MONTHLY_LIMIT = 50000; // R$50k/month for invoices and for profit distribution
-const IRRF_RATE = 0.1; // 10% IRRF alta renda on the full month's distribution above R$50k
+const MONTHLY_LIMIT = 50000; // R$50k/month of invoices: where the accounting fee tier jumps
 const ANNUAL_REFUND_LIMIT = 600000; // refundable in IRPF if yearly income stays below this
-const IRRF_START_YEAR = 2026; // the alta-renda rule only applies from 2026 on
 const yearOf = (d?: string) => (d ? Number(d.slice(0, 4)) : 0);
 const monthOf = (d?: string) => (d ? d.slice(0, 7) : "");
 const sum = <T,>(rows: T[] | undefined, pick: (r: T) => number, year: number, date: (r: T) => string) =>
@@ -84,11 +82,24 @@ function MonthExpensesCard({ total }: { total: number }) {
 
 // Profit distribution: above R$50k/month the full month's amount is taxed at
 // 10% IRRF (alta renda). It is not a hard cap, so we show the withholding.
-function DistributionMonthCard({ used, applyIrrf }: { used: number; applyIrrf: boolean }) {
-  const overLimit = used > MONTHLY_LIMIT;
-  const over = applyIrrf && overLimit;
-  const irrf = over ? used * IRRF_RATE : 0;
-  const pct = Math.min(100, (used / MONTHLY_LIMIT) * 100);
+// `irrf` is the sum of what the records themselves recorded as withheld (the
+// source of truth); `expected` is what the 10% rule would charge, shown only
+// when the two disagree.
+function DistributionMonthCard({
+  used,
+  irrf,
+  expected,
+  applyIrrf,
+}: {
+  used: number;
+  irrf: number;
+  expected: number;
+  applyIrrf: boolean;
+}) {
+  const overLimit = used > IRRF_MONTHLY_LIMIT;
+  const over = applyIrrf && irrf > 0;
+  const diverges = applyIrrf && Math.abs(irrf - expected) >= 0.01;
+  const pct = Math.min(100, (used / IRRF_MONTHLY_LIMIT) * 100);
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between">
@@ -112,35 +123,34 @@ function DistributionMonthCard({ used, applyIrrf }: { used: number; applyIrrf: b
       </div>
       <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
         {overLimit
-          ? `${brl(used - MONTHLY_LIMIT)} acima de ${brl(MONTHLY_LIMIT)}`
-          : `Faltam ${brl(MONTHLY_LIMIT - used)} para ${brl(MONTHLY_LIMIT)}`}
+          ? `${brl(used - IRRF_MONTHLY_LIMIT)} acima de ${brl(IRRF_MONTHLY_LIMIT)}`
+          : `Faltam ${brl(IRRF_MONTHLY_LIMIT - used)} para ${brl(IRRF_MONTHLY_LIMIT)}`}
       </p>
       <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-        {over ? `IRRF retido ~${brl(irrf)} (estimado)` : "Isento"} · isenção até{" "}
-        {brl(MONTHLY_LIMIT)}/mês
+        {over ? `IRRF retido ${brl(irrf)}` : "Isento"} · isenção até {brl(IRRF_MONTHLY_LIMIT)}/mês
+        {diverges && ` · pela regra: ${brl(expected)}`}
       </p>
     </Card>
   );
 }
 
-// Sum the year's distributions by month and withhold 10% on every month that
-// exceeds R$50k (the base is the full month, per Lei 15.270/2025).
-function annualDistribution(rows: { month: string; amount: number }[] | undefined, year: number) {
+// Sum the year's distributions. The withheld IRRF is the sum of what each
+// record recorded (profit_distributions.irrf is the source of truth, so a DARF
+// that came out different from the rule is reported as it really was);
+// `expected` is what the 10% rule would charge on every month above R$50k (the
+// base is the full month, per Lei 15.270/2025), kept only to flag divergence.
+function annualDistribution(rows: ProfitDistribution[] | undefined, year: number) {
   const byMonth: Record<string, number> = {};
-  (rows ?? [])
-    .filter((r) => yearOf(r.month) === year)
-    .forEach((r) => {
-      const m = monthOf(r.month);
-      byMonth[m] = (byMonth[m] ?? 0) + r.amount;
-    });
+  const inYear = (rows ?? []).filter((r) => yearOf(r.month) === year);
+  inYear.forEach((r) => {
+    const m = monthOf(r.month);
+    byMonth[m] = (byMonth[m] ?? 0) + r.amount;
+  });
   const taxable = year >= IRRF_START_YEAR;
-  let total = 0;
-  let irrf = 0;
-  for (const v of Object.values(byMonth)) {
-    total += v;
-    if (taxable && v > MONTHLY_LIMIT) irrf += v * IRRF_RATE;
-  }
-  return { total, irrf, taxable };
+  const total = Object.values(byMonth).reduce((s, v) => s + v, 0);
+  const irrf = inYear.reduce((s, r) => s + (r.irrf ?? 0), 0);
+  const expected = Object.values(byMonth).reduce((s, v) => s + suggestedIrrf(v, year), 0);
+  return { total, irrf, expected, taxable };
 }
 
 export default function Overview() {
@@ -214,6 +224,8 @@ export default function Overview() {
   const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
   const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
   const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
+  // Withheld IRRF as recorded on the distributions themselves, not recomputed.
+  const distIrrf = sumMonth(dist.list.data, (r) => r.irrf ?? 0, ym, (r) => r.month);
   const annualDist = annualDistribution(dist.list.data, year);
   // Total of the month's paid expenses (scheduled ones only once paid).
   const despesasMes = sumMonth(
@@ -272,6 +284,8 @@ export default function Overview() {
         <InvoiceFeeCard used={invoiceUsed} />
         <DistributionMonthCard
           used={distUsed}
+          irrf={distIrrf}
+          expected={suggestedIrrf(distUsed, Number(ym.slice(0, 4)))}
           applyIrrf={Number(ym.slice(0, 4)) >= IRRF_START_YEAR}
         />
         <MonthExpensesCard total={despesasMes} />
@@ -361,7 +375,10 @@ export default function Overview() {
               <span className="font-semibold">{brl(annualDist.irrf)}</span>
             </p>
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Retido 10% sobre o total dos meses acima de {brl(MONTHLY_LIMIT)} (DARF cód. 1841).
+              Soma do IRRF registrado em cada distribuição (DARF cód. 1841): 10% sobre o total dos
+              meses acima de {brl(IRRF_MONTHLY_LIMIT)}.
+              {Math.abs(annualDist.irrf - annualDist.expected) >= 0.01 &&
+                ` Pela regra seriam ${brl(annualDist.expected)}; confira os valores em Distribuição de Lucros.`}{" "}
               Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
               {brl(ANNUAL_REFUND_LIMIT)}.
             </p>

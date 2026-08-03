@@ -69,9 +69,9 @@
     { "id": "smpservice00004", "name": "COWORKING", "exp_day": 14, "default_amount": 890, "payment_type": "manual" }
   ],
   "profit_distributions": [
-    { "id": "smpprofitdis001", "month": "2026-01-01 00:00:00.000Z", "amount": 28000, "cota_irrf": 0, "notes": "abaixo de R$50k: isento" },
-    { "id": "smpprofitdis002", "month": "2026-02-01 00:00:00.000Z", "amount": 32000, "cota_irrf": 0, "notes": "" },
-    { "id": "smpprofitdis003", "month": "2026-03-01 00:00:00.000Z", "amount": 58000, "cota_irrf": 5800, "notes": "acima de R$50k: IRRF 10% sobre o mes inteiro" }
+    { "id": "smpprofitdis001", "month": "2026-01-01 00:00:00.000Z", "amount": 28000, "irrf": 0, "notes": "abaixo de R$50k: isento" },
+    { "id": "smpprofitdis002", "month": "2026-02-01 00:00:00.000Z", "amount": 32000, "irrf": 0, "notes": "" },
+    { "id": "smpprofitdis003", "month": "2026-03-01 00:00:00.000Z", "amount": 58000, "irrf": 5800, "notes": "acima de R$50k: IRRF 10% sobre o mes inteiro (DARF cod. 1841)" }
   ],
   "tax_periods": [],
   "settings": [

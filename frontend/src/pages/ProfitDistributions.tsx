@@ -3,15 +3,16 @@ import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { useYear } from "../lib/year";
 import type { ProfitDistribution } from "../lib/types";
+import { IRRF_MONTHLY_LIMIT, IRRF_START_YEAR, suggestedIrrf } from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal } from "../components/ui";
 
-const MONTHLY_LIMIT = 50000; // monthly IRRF alta renda threshold
 const ANNUAL_LIMIT = 600000; // yearly quota; above it the IRRF stops being refundable
-const IRRF_START_YEAR = 2026; // the alta-renda rule only applies from 2026 on
 const yearOf = (d: string) => d.slice(0, 4);
+const monthOf = (d: string) => d.slice(0, 7);
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
-const empty = { month: "", amount: "", notes: "" };
+const empty = { month: "", amount: "", irrf: "", notes: "" };
 
 export default function ProfitDistributions() {
   const { list, create, update, remove } = useCollection<ProfitDistribution>(
@@ -21,6 +22,9 @@ export default function ProfitDistributions() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProfitDistribution | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
+  // Once the IRRF field is edited by hand we stop overwriting it with the
+  // suggestion: the DARF is the source of truth, not our 10%.
+  const [irrfEdited, setIrrfEdited] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -31,24 +35,56 @@ export default function ProfitDistributions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Suggested withholding for one record: the law taxes the month as a whole,
+  // so we apply 10% over the other records of that month plus this amount, and
+  // charge this record its own share.
+  function suggestionFor(monthInput: string, amount: number, excludeId?: string) {
+    if (!monthInput || !amount) return 0;
+    const ym = monthInput.slice(0, 7);
+    const others = (list.data ?? [])
+      .filter((d) => d.id !== excludeId && monthOf(d.month) === ym)
+      .reduce((s, d) => s + d.amount, 0);
+    const monthIrrf = suggestedIrrf(others + amount, Number(ym.slice(0, 4)));
+    return monthIrrf === 0 ? 0 : (monthIrrf * amount) / (others + amount);
+  }
+
+  // Keeps the IRRF field in sync with the suggestion while it is untouched.
+  function setField(patch: Record<string, string>) {
+    setForm((f) => {
+      const next = { ...f, ...patch };
+      if (!irrfEdited) {
+        next.irrf = String(
+          round2(suggestionFor(next.month, Number(next.amount), editing?.id)),
+        );
+      }
+      return next;
+    });
+  }
+
   function openNew() {
     setEditing(null);
     setForm(empty);
+    setIrrfEdited(false);
     setOpen(true);
   }
   function openEdit(d: ProfitDistribution) {
     setEditing(d);
-    setForm({ month: toDateInput(d.month), amount: String(d.amount), notes: d.notes ?? "" });
+    setForm({
+      month: toDateInput(d.month),
+      amount: String(d.amount),
+      irrf: String(d.irrf ?? 0),
+      notes: d.notes ?? "",
+    });
+    // An existing record already carries a decided value; never overwrite it.
+    setIrrfEdited(true);
     setOpen(true);
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const amount = Number(form.amount);
     const data = {
       month: fromDateInput(form.month),
-      amount,
-      // Computed, not user-editable: remaining tax-free quota for the month.
-      cota_irrf: MONTHLY_LIMIT - amount,
+      amount: Number(form.amount),
+      irrf: Number(form.irrf || 0),
       notes: form.notes,
     };
     if (editing) await update.mutateAsync({ id: editing.id, data });
@@ -65,6 +101,16 @@ export default function ProfitDistributions() {
     const y = yearOf(d.month);
     byYear[y] = (byYear[y] ?? 0) + d.amount;
   });
+
+  // Monthly totals: both the R$50k threshold and the 10% apply to the month as
+  // a whole, so a month split across records is judged by its sum.
+  const byMonth: Record<string, number> = {};
+  rows.forEach((d) => {
+    byMonth[monthOf(d.month)] = (byMonth[monthOf(d.month)] ?? 0) + d.amount;
+  });
+
+  // What the 10% rule would charge for what is currently typed in the form.
+  const formSuggestion = round2(suggestionFor(form.month, Number(form.amount), editing?.id));
 
   return (
     <div className="space-y-6">
@@ -122,15 +168,22 @@ export default function ProfitDistributions() {
             <tr>
               <th className="px-4 py-3 text-left">Mês</th>
               <th className="px-4 py-3 text-right">Valor</th>
-              <th className="px-4 py-3 text-right">Cota IRRF alta renda</th>
+              <th className="px-4 py-3 text-right">Cota restante no mês</th>
+              <th className="px-4 py-3 text-right">IRRF retido</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {rows.map((d) => {
               const applies = Number(yearOf(d.month)) >= IRRF_START_YEAR;
-              const cota = MONTHLY_LIMIT - d.amount;
+              const monthTotal = byMonth[monthOf(d.month)] ?? 0;
+              const cota = IRRF_MONTHLY_LIMIT - monthTotal;
               const negative = applies && cota < 0;
+              const irrf = d.irrf ?? 0;
+              // The stored value is what we report; flag it when it does not
+              // match the 10% rule so a stale or missing one is visible.
+              const expected = round2(suggestionFor(d.month, d.amount, d.id));
+              const diverges = applies && Math.abs(irrf - expected) >= 0.01;
               return (
                 <tr key={d.id} className="border-t border-neutral-100 dark:border-neutral-800">
                   <td className="px-4 py-3 font-medium">{fmtDate(d.month)}</td>
@@ -143,6 +196,28 @@ export default function ProfitDistributions() {
                     }`}
                   >
                     {applies ? brl(cota) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {applies ? (
+                      <>
+                        <span
+                          className={
+                            irrf > 0
+                              ? "font-medium text-amber-600 dark:text-amber-400"
+                              : "text-neutral-600 dark:text-neutral-400"
+                          }
+                        >
+                          {brl(irrf)}
+                        </span>
+                        {diverges && (
+                          <span className="block text-xs text-neutral-400 dark:text-neutral-500">
+                            regra: {brl(expected)}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-neutral-600 dark:text-neutral-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Button variant="ghost" onClick={() => openEdit(d)}>
@@ -157,7 +232,7 @@ export default function ProfitDistributions() {
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
                   Nenhuma distribuição registrada em {year}.
                 </td>
               </tr>
@@ -167,9 +242,12 @@ export default function ProfitDistributions() {
       </Card>
 
       <p className="text-xs text-neutral-400 dark:text-neutral-500">
-        A cota IRRF alta renda é calculada automaticamente (R${" "}
-        {MONTHLY_LIMIT.toLocaleString("pt-BR")} − valor do mês). Quando fica negativa, a parcela do
-        mês excede R$50k e há retenção de 10% (restituível no IRPF se o ano ficar abaixo de R$600k).
+        A cota restante é derivada (R$ {IRRF_MONTHLY_LIMIT.toLocaleString("pt-BR")} − total do mês).
+        Quando fica negativa, o mês excede R$50k e há retenção de 10% sobre o mês inteiro
+        (restituível no IRPF se o ano ficar abaixo de R$600k). O <strong>IRRF retido</strong> é o
+        valor guardado no registro e é o que aparece nos totais do Painel: o formulário sugere os
+        10%, mas vale o que o DARF (cód. 1841) realmente foi. Quando o valor guardado difere da
+        regra, a linha mostra o valor esperado.
       </p>
 
       {open && (
@@ -183,7 +261,7 @@ export default function ProfitDistributions() {
                 type="date"
                 required
                 value={form.month}
-                onChange={(e) => setForm({ ...form, month: e.target.value })}
+                onChange={(e) => setField({ month: e.target.value })}
               />
             </Field>
             <Field label="Valor (BRL)">
@@ -192,9 +270,40 @@ export default function ProfitDistributions() {
                 step="0.01"
                 required
                 value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                onChange={(e) => setField({ amount: e.target.value })}
               />
             </Field>
+            <div>
+              <Field label="IRRF retido (BRL)">
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.irrf}
+                  onChange={(e) => {
+                    setIrrfEdited(true);
+                    setForm({ ...form, irrf: e.target.value });
+                  }}
+                />
+              </Field>
+              <p className="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                {formSuggestion > 0
+                  ? `Pela regra: ${brl(formSuggestion)} (10% sobre o mês inteiro, DARF cód. 1841).`
+                  : "Mês isento pela regra (abaixo de R$50k ou anterior a 2026)."}{" "}
+                Ajuste para o valor real do DARF se for diferente.
+                {irrfEdited && (
+                  <button
+                    type="button"
+                    className="ml-1 underline"
+                    onClick={() => {
+                      setIrrfEdited(false);
+                      setForm((f) => ({ ...f, irrf: String(formSuggestion) }));
+                    }}
+                  >
+                    usar o sugerido
+                  </button>
+                )}
+              </p>
+            </div>
             <Field label="Observação">
               <Input
                 value={form.notes}

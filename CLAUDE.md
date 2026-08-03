@@ -97,7 +97,7 @@ pay_frequency monthly|weekly, active), `platforms` (name, active),
 convert_day, rate, amount_brl), `expenses` (date, category free text, amount, notes, scheduled,
 paid, payment_type auto|manual),
 `recurring_services` (name, exp_day, default_amount, payment_type auto|manual),
-`profit_distributions` (month, amount, cota_irrf),
+`profit_distributions` (month, amount, irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `settings` (singleton, tax params).
 
 Platform is free text sourced from the `platforms` collection (not a fixed enum), so
@@ -120,6 +120,19 @@ new platforms can be added in Config.
   R$50k/month to the same PF is taxed 10% on the **full month's amount** (DARF cód. 1841).
   Refundable in the annual IRPF if total yearly income stays below R$600k. Profits
   accrued through 2025 are exempt. Only applies to years >= 2026.
+  `profit_distributions.irrf` stores the IRRF **actually withheld** on that record
+  (BRL) and is the **source of truth** for every "IRRF retido" total in the UI, so the
+  real DARF can be recorded when it differs from the rule (rounding, correction,
+  pre-2026 profits that stay exempt). The form pre-fills it with the computed 10% and
+  the user may override; where the stored value diverges from the rule, the UI shows
+  the expected one beside it instead of silently recomputing. The threshold and the
+  10% apply to the **month as a whole**, so a month split across records is judged by
+  its sum and each record carries its share. The old `cota_irrf` field (remaining
+  tax-free quota, never read) was dropped by
+  `migrations/1751900000_profit_distribution_irrf.go`, which backfills `irrf`; the
+  remaining quota is now derived for display only. Reimporting a **pre-migration**
+  backup leaves `irrf` at 0 (the old key no longer matches, by design, so a quota is
+  never read back as a withholding) - re-enter the values or export a fresh backup.
 - **Imports / cotação efetiva:** enter USD sent and BRL received; effective rate =
   BRL ÷ USD (embeds platform fees like Deel's). "Estimar pelo câmbio" pre-fills BRL
   from the market rate (AwesomeAPI).

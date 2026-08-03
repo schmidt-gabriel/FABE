@@ -66,9 +66,26 @@ export const expensePaid = (e: Expense) => !e.scheduled || !!e.paid;
 export interface ProfitDistribution extends BaseRecord {
   month: string;
   amount: number;
-  cota_irrf?: number;
+  // IRRF alta renda actually withheld on this record, in BRL (DARF cód. 1841).
+  // This is the source of truth for every "IRRF retido" total in the UI: the
+  // form pre-fills it with the computed 10% of the month, but it can be
+  // overridden with what the DARF really came out to (rounding, correction,
+  // profits accrued through 2025 that stay exempt). Summing the records of a
+  // month gives the month's withholding.
+  irrf?: number;
   notes?: string;
 }
+
+// IRRF alta renda (Lei 15.270/2025): a month distributing more than R$50k to
+// the same PF is taxed 10% on the *full* month's amount, from 2026 on.
+export const IRRF_MONTHLY_LIMIT = 50000;
+export const IRRF_RATE = 0.1;
+export const IRRF_START_YEAR = 2026;
+
+// What the law charges on a month's total. Used to pre-fill `irrf` on new
+// records and to flag stored values that diverge from it.
+export const suggestedIrrf = (monthTotal: number, year: number) =>
+  year >= IRRF_START_YEAR && monthTotal > IRRF_MONTHLY_LIMIT ? monthTotal * IRRF_RATE : 0;
 
 export interface RecurringService extends BaseRecord {
   name: string;

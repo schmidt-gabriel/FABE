@@ -326,7 +326,11 @@ export default function Overview() {
         <Stat
           label="Bruto (importado)"
           value={brl(bruto)}
-          hint={`${usd(importedUsd)} convertidos de ${usd(receivedUsd)} recebidos`}
+          hint={
+            receivedUsd > 0
+              ? `${((importedUsd / receivedUsd) * 100).toFixed(1)}% do recebido convertido`
+              : "nada recebido no ano"
+          }
         />
         <Stat
           label="Líquido (bruto − despesas)"

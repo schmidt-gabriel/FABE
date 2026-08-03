@@ -96,9 +96,9 @@ curl -s -X POST "http://localhost:8090/api/import/backup?mode=overwrite" \
 `clients` (name, default_platform, monthly_amount, billing_type monthly|hourly,
 pay_frequency monthly|weekly, active), `platforms` (name, active),
 `remittances` (client→, platform, amount_usd, pay_day), `imports` (platform, amount_usd,
-convert_day, rate, amount_brl), `expenses` (date, category free text, amount, notes, scheduled,
-paid, payment_type auto|manual),
-`recurring_services` (name, exp_day, default_amount, payment_type auto|manual),
+convert_day, rate, amount_brl), `expenses` (date, payee, category free text, amount, notes,
+scheduled, paid, payment_type auto|manual),
+`recurring_services` (name, category, exp_day, default_amount, payment_type auto|manual),
 `profit_distributions` (month, amount, irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `settings` (singleton, tax params).
 
@@ -149,18 +149,25 @@ new platforms can be added in Config.
   Contador's table: ≤R$50k → R$295/mês; R$50k–100k → R$444; R$100k–1M → R$622; >R$1M → R$918.
 - **Recurring services** (`recurring_services`) have a due day; on the Dashboard a
   service shows red "atrasado" if past its day with no matching expense that month.
-  Matching is by category: an expense whose `category` equals the service name marks it
-  paid, which is why `expenses.category` is free text (the frontend suggests the known
-  categories plus the service names). Services carry `payment_type` (auto|manual); a
+  Matching is by payee: an expense whose `payee` equals the service name marks it paid
+  (`expenseMatchesService`); the `category` is still accepted for the same match because
+  that is how they matched before expenses had a payee. A service may carry its own
+  `category`, which is the one given to the expense it posts; empty falls back to the
+  service name. Services carry `payment_type` (auto|manual); a
   **manual** one is registered by clicking "Registrar" (Despesas) or "+ Despesa". An
   **auto** one posts its expense automatically on the due date: `autoRegisterAutoServices`
   in `api/autoregister.go` runs on startup and daily (cron 06:00), creating a paid expense
-  (category = service name, amount = default_amount) for the current month once `exp_day`
-  is reached, skipping any already recorded. Only the current month is handled. The same
+  (payee = service name, category = service category, amount = default_amount) for the
+  current month once `exp_day` is reached, skipping any already recorded. Only the current month is handled. The same
   routine also marks any **scheduled expense** with `payment_type=auto` (a "despesa a pagar"
   the user set to automatic) as paid once its date is reached (`autoPayScheduledAutoExpenses`).
   Both can be triggered manually via `POST /api/maintenance/auto-register` (Config → Rotinas →
   "Rodar agora"), which returns `{created, paid}`.
+- **Despesa: recebedor x categoria.** `expenses.payee` ("Recebedor") is who was paid
+  ("Unimed"); `category` is what groups it ("Health insurance") and is what the Dashboard
+  breakdown and the recurring-service matching aggregate on. Both are free text and the
+  form suggests what is already in the data. `payee` is optional: records saved before it
+  existed show the category as their label (`expenseLabel` in `lib/types.ts`).
 - **Future expenses:** an expense created as "a pagar" gets `scheduled=true` and its
   `date` is the due date; it shows in the Dashboard "Próximos pagamentos" card and is
   excluded from expense totals until `paid=true`. `scheduled` stays true after payment

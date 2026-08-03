@@ -3,11 +3,24 @@ import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Expense, RecurringService } from "../lib/types";
-import { EXPENSE_CATEGORIES, expensePaid, paymentLabel } from "../lib/types";
+import {
+  EXPENSE_CATEGORIES,
+  expenseLabel,
+  expenseMatchesService,
+  expensePaid,
+  paymentLabel,
+} from "../lib/types";
 import { brl, fmtDate, toDateInput, fromDateInput } from "../lib/pb";
 import { Button, Card, Field, Input, Modal, Select } from "../components/ui";
 
-const empty = { date: "", category: "", amount: "", notes: "", payment_type: "manual" };
+const empty = {
+  date: "",
+  payee: "",
+  category: "",
+  amount: "",
+  notes: "",
+  payment_type: "manual",
+};
 
 export default function Expenses() {
   const { list, create, update, remove } = useCollection<Expense>("expenses", {
@@ -52,6 +65,7 @@ export default function Expenses() {
     setEditing(x);
     setForm({
       date: toDateInput(x.date),
+      payee: x.payee ?? "",
       category: x.category,
       amount: String(x.amount),
       notes: x.notes ?? "",
@@ -64,6 +78,7 @@ export default function Expenses() {
   // "Registrar" on an upcoming service row: opens the new-expense modal
   // pre-filled as paid today, which removes the pending row once saved.
   function registerUpcoming(u: {
+    payee: string;
     category: string;
     notes: string;
     amount: number;
@@ -72,6 +87,7 @@ export default function Expenses() {
     setEditing(null);
     setForm({
       date: today,
+      payee: u.payee,
       category: u.category,
       amount: u.amount ? String(u.amount) : "",
       notes: u.notes,
@@ -85,6 +101,7 @@ export default function Expenses() {
     e.preventDefault();
     const data = {
       date: fromDateInput(form.date),
+      payee: form.payee,
       category: form.category,
       amount: Number(form.amount),
       notes: form.notes,
@@ -111,17 +128,17 @@ export default function Expenses() {
   const ym = `${year}-${month}`;
   const servicePaid = (name: string) =>
     inYear.some(
-      (x) =>
-        expensePaid(x) &&
-        x.category.toUpperCase() === name.toUpperCase() &&
-        x.date.slice(5, 7) === month,
+      (x) => expensePaid(x) && expenseMatchesService(x, name) && x.date.slice(5, 7) === month,
     );
   const upcoming = (services.list.data ?? [])
     .filter((s) => !servicePaid(s.name))
     .map((s) => ({
       key: `svc-${s.id}`,
       date: `${ym}-${String(s.exp_day).padStart(2, "0")}`,
-      category: s.name,
+      payee: s.name,
+      // A service without its own category names the category after itself,
+      // which is what expenses did before they had a payee.
+      category: s.category?.trim() || s.name,
       notes: "",
       amount: s.default_amount ?? 0,
       payment_type: s.payment_type === "auto" ? "auto" : "manual",
@@ -133,11 +150,22 @@ export default function Expenses() {
     rows.filter((x) => !expensePaid(x)).reduce((s, x) => s + x.amount, 0) +
     upcoming.reduce((s, u) => s + u.amount, 0);
 
-  // Category is free text; suggest the known categories plus service names
-  // (services are marked paid by a same-named expense).
-  const categorySuggestions = [
-    ...new Set([...EXPENSE_CATEGORIES, ...(services.list.data ?? []).map((s) => s.name)]),
-  ];
+  // Both fields are free text. Payees suggest the recurring services (a service
+  // is marked paid by an expense naming it as payee) plus the payees already in
+  // use; categories, the known ones plus whatever is already in the data.
+  const suggestions = (values: (string | undefined)[]) =>
+    [...new Set(values.map((v) => v?.trim()).filter((v): v is string => !!v))].sort((a, b) =>
+      a.localeCompare(b, "pt-BR"),
+    );
+  const payeeSuggestions = suggestions([
+    ...(services.list.data ?? []).map((s) => s.name),
+    ...(list.data ?? []).map((x) => x.payee),
+  ]);
+  const categorySuggestions = suggestions([
+    ...EXPENSE_CATEGORIES,
+    ...(services.list.data ?? []).map((s) => s.category),
+    ...(list.data ?? []).map((x) => x.category),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -151,6 +179,7 @@ export default function Expenses() {
           <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-800/50 dark:text-neutral-400">
             <tr>
               <th className="px-4 py-3 text-left">Data</th>
+              <th className="px-4 py-3 text-left">Recebedor</th>
               <th className="px-4 py-3 text-left">Categoria</th>
               <th className="px-4 py-3 text-left">Observação</th>
               <th className="px-4 py-3 text-left">Pagamento</th>
@@ -165,7 +194,7 @@ export default function Expenses() {
                   {fmtDate(u.date)}
                 </td>
                 <td className="px-4 py-3 font-medium">
-                  {u.category}
+                  {u.payee}
                   <span
                     className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
                       u.date < today
@@ -176,6 +205,7 @@ export default function Expenses() {
                     {u.date < today ? "atrasada" : "a pagar"}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{u.category}</td>
                 <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">
                   {u.notes || "—"}
                 </td>
@@ -194,7 +224,7 @@ export default function Expenses() {
               <tr key={x.id} className="border-t border-neutral-100 dark:border-neutral-800">
                 <td className="px-4 py-3">{fmtDate(x.date)}</td>
                 <td className="px-4 py-3 font-medium">
-                  {x.category}
+                  {expenseLabel(x)}
                   {!expensePaid(x) && (
                     <span
                       className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -207,6 +237,7 @@ export default function Expenses() {
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{x.category}</td>
                 <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{x.notes || "—"}</td>
                 <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
                   {paymentLabel(x.payment_type)}
@@ -224,7 +255,7 @@ export default function Expenses() {
             ))}
             {rows.length === 0 && upcoming.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500">
                   Nenhuma despesa registrada em {MONTHS[Number(month) - 1]} de {year}.
                 </td>
               </tr>
@@ -232,7 +263,7 @@ export default function Expenses() {
           </tbody>
           <tfoot className="bg-neutral-50 font-semibold dark:bg-neutral-800/50">
             <tr className="border-t border-neutral-200 dark:border-neutral-700">
-              <td className="px-4 py-3" colSpan={4}>
+              <td className="px-4 py-3" colSpan={5}>
                 Total
               </td>
               <td className="px-4 py-3 text-right">{brl(total)}</td>
@@ -240,7 +271,7 @@ export default function Expenses() {
             </tr>
             {pendingTotal > 0 && (
               <tr className="border-t border-neutral-200 text-amber-600 dark:border-neutral-700 dark:text-amber-400">
-                <td className="px-4 py-3" colSpan={4}>
+                <td className="px-4 py-3" colSpan={5}>
                   A pagar
                 </td>
                 <td className="px-4 py-3 text-right">{brl(pendingTotal)}</td>
@@ -264,6 +295,19 @@ export default function Expenses() {
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
               />
+            </Field>
+            <Field label="Recebedor">
+              <Input
+                list="expense-payees"
+                placeholder="Ex.: Unimed"
+                value={form.payee}
+                onChange={(e) => setForm({ ...form, payee: e.target.value })}
+              />
+              <datalist id="expense-payees">
+                {payeeSuggestions.map((n) => (
+                  <option key={n} value={n} />
+                ))}
+              </datalist>
             </Field>
             <Field label="Categoria">
               <Input

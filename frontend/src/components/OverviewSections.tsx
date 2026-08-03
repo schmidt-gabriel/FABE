@@ -2,7 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
-import { expensePaid, IRRF_MONTHLY_LIMIT, IRRF_START_YEAR, suggestedIrrf } from "../lib/types";
+import {
+  expenseMatchesService,
+  expensePaid,
+  IRRF_MONTHLY_LIMIT,
+  IRRF_START_YEAR,
+  suggestedIrrf,
+} from "../lib/types";
 import { pb, brl, usd, fmtDate } from "../lib/pb";
 import { Card } from "./ui";
 
@@ -337,10 +343,7 @@ export function UpcomingPayments() {
   const day = ym < currentYm ? 32 : ym > currentYm ? 0 : now.getDate();
   const paidThisMonth = (name: string) =>
     (expenses.list.data ?? []).some(
-      (e) =>
-        expensePaid(e) &&
-        e.category.toUpperCase() === name.toUpperCase() &&
-        e.date.slice(0, 7) === ym,
+      (e) => expensePaid(e) && expenseMatchesService(e, name) && e.date.slice(0, 7) === ym,
     );
 
   // One-off future expenses (despesas a pagar) due in the selected month;
@@ -360,7 +363,7 @@ export function UpcomingPayments() {
     })),
     ...monthScheduled.map((e) => ({
       key: e.id,
-      name: e.notes || e.category,
+      name: e.payee?.trim() || e.notes || e.category,
       day: Number(e.date.slice(8, 10)),
       amount: e.amount,
       paid: !!e.paid,

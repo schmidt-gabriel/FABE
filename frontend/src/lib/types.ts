@@ -44,6 +44,9 @@ export interface ImportRecord extends BaseRecord {
 
 export interface Expense extends BaseRecord {
   date: string; // for scheduled expenses this is the due date
+  // Who was paid ("Unimed"); the category groups it ("Health insurance").
+  // Optional: records created before the field existed only carry a category.
+  payee?: string;
   category: string;
   amount: number;
   notes?: string;
@@ -62,6 +65,18 @@ export const paymentLabel = (t?: "auto" | "manual") =>
 
 // A regular expense counts as paid; a scheduled one only after being marked.
 export const expensePaid = (e: Expense) => !e.scheduled || !!e.paid;
+
+// How an expense is labelled: its payee, or the category for records saved
+// before expenses had a payee of their own.
+export const expenseLabel = (e: Expense) => e.payee?.trim() || e.category;
+
+// A recurring service is marked paid by an expense whose payee is the service.
+// The category still counts because that is how they matched before the payee
+// existed (and how a service without its own category fills one in).
+export const expenseMatchesService = (e: Expense, service: string) => {
+  const s = service.trim().toUpperCase();
+  return (e.payee ?? "").trim().toUpperCase() === s || e.category.trim().toUpperCase() === s;
+};
 
 export interface ProfitDistribution extends BaseRecord {
   month: string;
@@ -89,6 +104,9 @@ export const suggestedIrrf = (monthTotal: number, year: number) =>
 
 export interface RecurringService extends BaseRecord {
   name: string;
+  // Category given to the expense this service posts; empty falls back to the
+  // service name.
+  category?: string;
   exp_day: number;
   default_amount?: number;
   // Empty (legacy records) is treated as manual.

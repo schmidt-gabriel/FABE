@@ -7,7 +7,7 @@ import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 
 // Pages driven by the sidebar month filter, separated from the annual ones.
 const navMonthly = [
-  { to: "/", label: "Visão geral", end: true },
+  { to: "/", label: "Dashboard", end: true },
   { to: "/remessas", label: "Remessas" },
   { to: "/importacoes", label: "Notas Fiscais" },
   { to: "/despesas", label: "Despesas" },

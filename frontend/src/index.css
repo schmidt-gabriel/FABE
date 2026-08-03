@@ -10,6 +10,34 @@ html.dark {
   color-scheme: dark;
 }
 
+/* Data-viz palette (Dashboard). The series hues are stepped per mode, not
+   flipped: each column was validated against the surface it renders on (white
+   card / neutral-900 card) for lightness band, chroma, CVD separation and
+   contrast. Every chart also ships a table view, which is what covers the
+   light-mode aqua sitting just under 3:1. */
+.viz {
+  --viz-s1: #2a78d6; /* blue   */
+  --viz-s2: #eb6834; /* orange */
+  --viz-s3: #1baf7a; /* aqua   */
+  --viz-neutral: #c3c2b7; /* "Outros" and other de-emphasis marks */
+  --viz-ink: #52514e;
+  --viz-muted: #898781;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+  --viz-surface: #ffffff;
+}
+html.dark .viz {
+  --viz-s1: #3987e5;
+  --viz-s2: #d95926;
+  --viz-s3: #199e70;
+  --viz-neutral: #52514e;
+  --viz-ink: #c3c2b7;
+  --viz-muted: #898781;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+  --viz-surface: #171717;
+}
+
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

@@ -6,7 +6,11 @@ import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
 import { expensePaid, IRRF_MONTHLY_LIMIT, IRRF_START_YEAR, suggestedIrrf } from "../lib/types";
 import { pb, brl, usd } from "../lib/pb";
-import { Button, Card } from "../components/ui";
+import { Button, Card } from "./ui";
+
+// The month and year blocks of the old "Visão geral" page. They live here as
+// components because the Dashboard is now a single page: quick actions, the
+// month block, the year block and the charts, one below the other.
 const MONTHLY_LIMIT = 50000; // R$50k/month of invoices: where the accounting fee tier jumps
 const ANNUAL_REFUND_LIMIT = 600000; // refundable in IRPF if yearly income stays below this
 const yearOf = (d?: string) => (d ? Number(d.slice(0, 4)) : 0);
@@ -153,26 +157,129 @@ function annualDistribution(rows: ProfitDistribution[] | undefined, year: number
   return { total, irrf, expected, taxable };
 }
 
-export default function Overview() {
+// Collapsible section state, remembered per block (same localStorage keys the
+// old Visão geral used, so a collapsed block stays collapsed after the merge).
+function useCollapse(key: string) {
+  const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
+  const toggle = () =>
+    setOpen((v) => {
+      localStorage.setItem(key, v ? "0" : "1");
+      return !v;
+    });
+  return [open, toggle] as const;
+}
+
+export function SectionToggle({
+  open,
+  onToggle,
+  label,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+      aria-expanded={open}
+    >
+      <svg
+        className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M6 4l4 4-4 4V4z" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+// The "+ Remessa / + Nota fiscal / ..." row at the top of the page.
+export function QuickActions() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="ghost" onClick={() => navigate("/remessas?new=1")}>
+        + Remessa
+      </Button>
+      <Button variant="ghost" onClick={() => navigate("/importacoes?new=1")}>
+        + Nota fiscal
+      </Button>
+      <Button variant="ghost" onClick={() => navigate("/despesas?new=1")}>
+        + Despesa
+      </Button>
+      <Button variant="ghost" onClick={() => navigate("/lucros?new=1")}>
+        + Distribuição de lucro
+      </Button>
+    </div>
+  );
+}
+
+// Everything scoped to the month selected in the sidebar: what is due, what is
+// still coming in, and the three limit cards.
+export function MonthSection() {
   const now0 = new Date();
   const { year, month } = useYear(); // global, selected in the sidebar
-  const [showYearSummary, setShowYearSummary] = useState(
-    () => localStorage.getItem("overview-year-summary") !== "0",
+  const [open, toggle] = useCollapse("overview-month-section");
+
+  const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
+  const expenses = useCollection<Expense>("expenses", { sort: "-date" });
+  const dist = useCollection<ProfitDistribution>("profit_distributions", { sort: "-month" });
+
+  // A month past the latest available one (this month, or December for past
+  // years) is clamped down to it.
+  const maxMonth = year === now0.getFullYear() ? now0.getMonth() : 11;
+  const selMonth = Math.min(Number(month) - 1, maxMonth);
+  const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
+
+  const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
+  const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
+  // Withheld IRRF as recorded on the distributions themselves, not recomputed.
+  const distIrrf = sumMonth(dist.list.data, (r) => r.irrf ?? 0, ym, (r) => r.month);
+  // Total of the month's paid expenses (scheduled ones only once paid).
+  const despesasMes = sumMonth(
+    (expenses.list.data ?? []).filter(expensePaid),
+    (r) => r.amount,
+    ym,
+    (r) => r.date,
   );
-  const toggleYearSummary = () =>
-    setShowYearSummary((v) => {
-      localStorage.setItem("overview-year-summary", v ? "0" : "1");
-      return !v;
-    });
-  const [showMonthSection, setShowMonthSection] = useState(
-    () => localStorage.getItem("overview-month-section") !== "0",
+
+  return (
+    <div className="space-y-6">
+      {/* Month comes from the sidebar selector; shown here for context. */}
+      <SectionToggle open={open} onToggle={toggle} label={`Mês de ${MONTHS[selMonth]}`} />
+
+      {open && (
+        <>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <UpcomingPayments ym={ym} />
+            <Receivables ym={ym} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <InvoiceFeeCard used={invoiceUsed} />
+            <DistributionMonthCard
+              used={distUsed}
+              irrf={distIrrf}
+              expected={suggestedIrrf(distUsed, year)}
+              applyIrrf={year >= IRRF_START_YEAR}
+            />
+            <MonthExpensesCard total={despesasMes} />
+          </div>
+        </>
+      )}
+    </div>
   );
-  const toggleMonthSection = () =>
-    setShowMonthSection((v) => {
-      localStorage.setItem("overview-month-section", v ? "0" : "1");
-      return !v;
-    });
-  const navigate = useNavigate();
+}
+
+// The year's totals: revenue, expenses, taxes, distributed profit and the FX
+// quote used to estimate what is still to be brought in.
+export function YearSection() {
+  const { year } = useYear();
+  const [open, toggle] = useCollapse("overview-year-summary");
 
   const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
@@ -226,202 +333,113 @@ export default function Overview() {
   const effectiveRate = importedUsd > 0 ? bruto / importedUsd : 0;
   const estimateRate = rate || effectiveRate;
   const estimateSource = rate ? `cotação ${rate.toFixed(4)}` : `câmbio efetivo ${effectiveRate.toFixed(4)}`;
-
-  // Monthly view (limits + due dates), driven by the sidebar year + month.
-  // A month past the latest available one (this month, or December for past
-  // years) is clamped down to it.
-  const maxMonth = year === now0.getFullYear() ? now0.getMonth() : 11;
-  const selMonth = Math.min(Number(month) - 1, maxMonth);
-  const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
-  const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
-  const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
-  // Withheld IRRF as recorded on the distributions themselves, not recomputed.
-  const distIrrf = sumMonth(dist.list.data, (r) => r.irrf ?? 0, ym, (r) => r.month);
   const annualDist = annualDistribution(dist.list.data, year);
-  // Total of the month's paid expenses (scheduled ones only once paid).
-  const despesasMes = sumMonth(
-    (expenses.list.data ?? []).filter(expensePaid),
-    (r) => r.amount,
-    ym,
-    (r) => r.date,
-  );
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Visão geral</h1>
+      <SectionToggle open={open} onToggle={toggle} label={`Resumo de ${year}`} />
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant="ghost" onClick={() => navigate("/remessas?new=1")}>
-          + Remessa
-        </Button>
-        <Button variant="ghost" onClick={() => navigate("/importacoes?new=1")}>
-          + Nota fiscal
-        </Button>
-        <Button variant="ghost" onClick={() => navigate("/despesas?new=1")}>
-          + Despesa
-        </Button>
-        <Button variant="ghost" onClick={() => navigate("/lucros?new=1")}>
-          + Distribuição de lucro
-        </Button>
-      </div>
+      {open && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Bruto (importado)"
+              value={brl(bruto)}
+              hint={
+                receivedUsd > 0
+                  ? `${((importedUsd / receivedUsd) * 100).toFixed(1)}% do recebido convertido`
+                  : "nada recebido no ano"
+              }
+            />
+            <Stat
+              label="Líquido (bruto − despesas)"
+              value={brl(liquido)}
+              hint={`Despesas: ${brl(despesas)}${bruto > 0 ? ` · margem de ${((liquido / bruto) * 100).toFixed(1)}%` : ""}`}
+            />
+            <Stat
+              label="Valor a trazer"
+              value={usd(toBring)}
+              hint={
+                estimateRate
+                  ? `≈ ${brl(toBring * estimateRate)} (aproximado · ${estimateSource})`
+                  : "recebido − importado"
+              }
+            />
+            <Stat label="Impostos do ano (apuração)" value={brl(tax.data?.year_total ?? 0)} />
+          </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={toggleMonthSection}
-          className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-          aria-expanded={showMonthSection}
-        >
-          <svg
-            className={`h-3.5 w-3.5 transition-transform ${showMonthSection ? "rotate-90" : ""}`}
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M6 4l4 4-4 4V4z" />
-          </svg>
-          {/* Month comes from the sidebar selector; shown here for context. */}
-          Mês de {MONTHS[selMonth]}
-        </button>
-      </div>
-
-      {showMonthSection && (
-      <>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <UpcomingPayments ym={ym} />
-        <Receivables ym={ym} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <InvoiceFeeCard used={invoiceUsed} />
-        <DistributionMonthCard
-          used={distUsed}
-          irrf={distIrrf}
-          expected={suggestedIrrf(distUsed, Number(ym.slice(0, 4)))}
-          applyIrrf={Number(ym.slice(0, 4)) >= IRRF_START_YEAR}
-        />
-        <MonthExpensesCard total={despesasMes} />
-      </div>
-      </>
-      )}
-
-      <button
-        onClick={toggleYearSummary}
-        className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-        aria-expanded={showYearSummary}
-      >
-        <svg
-          className={`h-3.5 w-3.5 transition-transform ${showYearSummary ? "rotate-90" : ""}`}
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path d="M6 4l4 4-4 4V4z" />
-        </svg>
-        Resumo de {year}
-      </button>
-
-      {showYearSummary && (
-      <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label="Bruto (importado)"
-          value={brl(bruto)}
-          hint={
-            receivedUsd > 0
-              ? `${((importedUsd / receivedUsd) * 100).toFixed(1)}% do recebido convertido`
-              : "nada recebido no ano"
-          }
-        />
-        <Stat
-          label="Líquido (bruto − despesas)"
-          value={brl(liquido)}
-          hint={`Despesas: ${brl(despesas)}`}
-        />
-        <Stat
-          label="Valor a trazer"
-          value={usd(toBring)}
-          hint={
-            estimateRate
-              ? `≈ ${brl(toBring * estimateRate)} (aproximado · ${estimateSource})`
-              : "recebido − importado"
-          }
-        />
-        <Stat label="Impostos do ano (apuração)" value={brl(tax.data?.year_total ?? 0)} />
-      </div>
-
-      {/* The IRRF alta renda details only apply from 2026 on; earlier years
-          show just the annual total. */}
-      <Card className="p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Distribuição de lucros no ano · {year}
-          </p>
-          {annualDist.taxable && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                annualDist.total > ANNUAL_REFUND_LIMIT
-                  ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
-              }`}
-            >
-              {annualDist.total > ANNUAL_REFUND_LIMIT ? "Acima de R$600k" : "IRRF restituível"}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-          {brl(annualDist.total)}
-          {annualDist.taxable && (
-            <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
-              {" "}
-              de {brl(ANNUAL_REFUND_LIMIT)}
-            </span>
-          )}
-        </p>
-        {annualDist.taxable && (
-          <>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-              <div
-                className={`h-full ${annualDist.total > ANNUAL_REFUND_LIMIT ? "bg-red-500" : "bg-emerald-500"}`}
-                style={{ width: `${Math.min(100, (annualDist.total / ANNUAL_REFUND_LIMIT) * 100)}%` }}
-              />
+          {/* The IRRF alta renda details only apply from 2026 on; earlier years
+              show just the annual total. */}
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Distribuição de lucros no ano · {year}
+              </p>
+              {annualDist.taxable && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    annualDist.total > ANNUAL_REFUND_LIMIT
+                      ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+                  }`}
+                >
+                  {annualDist.total > ANNUAL_REFUND_LIMIT ? "Acima de R$600k" : "IRRF restituível"}
+                </span>
+              )}
             </div>
-            <p className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">
-              IRRF alta renda retido no ano:{" "}
-              <span className="font-semibold">{brl(annualDist.irrf)}</span>
+            <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
+              {brl(annualDist.total)}
+              {annualDist.taxable && (
+                <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
+                  {" "}
+                  de {brl(ANNUAL_REFUND_LIMIT)}
+                </span>
+              )}
             </p>
-            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              Soma do IRRF registrado em cada distribuição (DARF cód. 1841): 10% sobre o total dos
-              meses acima de {brl(IRRF_MONTHLY_LIMIT)}.
-              {Math.abs(annualDist.irrf - annualDist.expected) >= 0.01 &&
-                ` Pela regra seriam ${brl(annualDist.expected)}; confira os valores em Distribuição de Lucros.`}{" "}
-              Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
-              {brl(ANNUAL_REFUND_LIMIT)}.
-            </p>
-          </>
-        )}
-      </Card>
+            {annualDist.taxable && (
+              <>
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                  <div
+                    className={`h-full ${annualDist.total > ANNUAL_REFUND_LIMIT ? "bg-red-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min(100, (annualDist.total / ANNUAL_REFUND_LIMIT) * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">
+                  IRRF alta renda retido no ano:{" "}
+                  <span className="font-semibold">{brl(annualDist.irrf)}</span>
+                </p>
+                <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                  Soma do IRRF registrado em cada distribuição (DARF cód. 1841): 10% sobre o total dos
+                  meses acima de {brl(IRRF_MONTHLY_LIMIT)}.
+                  {Math.abs(annualDist.irrf - annualDist.expected) >= 0.01 &&
+                    ` Pela regra seriam ${brl(annualDist.expected)}; confira os valores em Distribuição de Lucros.`}{" "}
+                  Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
+                  {brl(ANNUAL_REFUND_LIMIT)}.
+                </p>
+              </>
+            )}
+          </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Stat
-          label="Cotação atual (USD/BRL)"
-          value={rate ? rate.toFixed(4) : fx.isLoading ? "…" : "—"}
-          hint={
-            fx.data?.date
-              ? `fonte: AwesomeAPI · ${fx.data.date}${fx.data.stale ? " (desatualizada)" : ""}`
-              : fx.isError
-                ? "cotação indisponível no momento"
-                : undefined
-          }
-        />
-        <Stat
-          label="Total recebido (remessas)"
-          value={usd(receivedUsd)}
-          hint={`${usd(importedUsd)} já importados`}
-        />
-      </div>
-      </>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Stat
+              label="Cotação atual (USD/BRL)"
+              value={rate ? rate.toFixed(4) : fx.isLoading ? "…" : "—"}
+              hint={
+                fx.data?.date
+                  ? `fonte: AwesomeAPI · ${fx.data.date}${fx.data.stale ? " (desatualizada)" : ""}`
+                  : fx.isError
+                    ? "cotação indisponível no momento"
+                    : undefined
+              }
+            />
+            <Stat
+              label="Total recebido (remessas)"
+              value={usd(receivedUsd)}
+              hint={`${usd(importedUsd)} já importados`}
+            />
+          </div>
+        </>
       )}
-
     </div>
   );
 }

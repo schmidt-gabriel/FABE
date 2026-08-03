@@ -36,10 +36,12 @@ backend/
       export.go                 # /api/export/* and /api/import/backup
       autoregister.go           # auto-debited recurring services post their expense
 frontend/
-  src/pages/                    # Overview, Remittances, Imports, Expenses,
+  src/pages/                    # Dashboard, Remittances, Imports, Expenses,
                                 # ProfitDistributions, Taxes, Config, Export, Login
   src/lib/                      # pb (client + formatters), useCollection, types, theme
-  src/components/               # ui primitives, Layout
+  src/components/               # ui primitives, Layout,
+                                # OverviewSections (month + year blocks of the
+                                # landing page), charts (SVG chart kit)
 docker-compose.yml, Makefile      # data backup lives OUTSIDE the repo (see below)
 ```
 
@@ -141,11 +143,11 @@ new platforms can be added in Config.
   and gets the previous business day back (the response `date` is the day the quote
   really belongs to, not the one requested). Transient failures (network, 5xx, 429) are
   retried. The undated "latest" lookup falls back to the last quote the process saw,
-  flagged `"stale": true`, so the Overview card never blanks out; a **dated** lookup has
+  flagged `"stale": true`, so the Dashboard card never blanks out; a **dated** lookup has
   no safe fallback (it feeds a stored `amount_brl`) and still returns 502.
 - **Notas fiscais R$50k:** it is the accounting fee tier threshold, not a legal cap.
   Contador's table: ≤R$50k → R$295/mês; R$50k–100k → R$444; R$100k–1M → R$622; >R$1M → R$918.
-- **Recurring services** (`recurring_services`) have a due day; on the Overview a
+- **Recurring services** (`recurring_services`) have a due day; on the Dashboard a
   service shows red "atrasado" if past its day with no matching expense that month.
   Matching is by category: an expense whose `category` equals the service name marks it
   paid, which is why `expenses.category` is free text (the frontend suggests the known
@@ -160,7 +162,7 @@ new platforms can be added in Config.
   Both can be triggered manually via `POST /api/maintenance/auto-register` (Config → Rotinas →
   "Rodar agora"), which returns `{created, paid}`.
 - **Future expenses:** an expense created as "a pagar" gets `scheduled=true` and its
-  `date` is the due date; it shows in the Overview "Próximos pagamentos" card and is
+  `date` is the due date; it shows in the Dashboard "Próximos pagamentos" card and is
   excluded from expense totals until `paid=true`. `scheduled` stays true after payment
   so the card keeps showing it as "pago". Regular expenses (`scheduled=false`) are
   always treated as paid.
@@ -181,4 +183,13 @@ new platforms can be added in Config.
   reimport `backup.json`).
 - Dates are stored as PocketBase datetimes; the UI works with calendar dates and uses
   **local** time for "current month" logic (not UTC).
+- **Dashboard (`/`)** is the single landing page (the old "Visão geral" was merged into
+  it): quick actions, the month block, the year block (both in
+  `components/OverviewSections.tsx`) and the charts, each block collapsible.
+- **Charts** are hand-rolled SVG in `components/charts.tsx` (columns grouped/stacked,
+  horizontal bars, line), no chart library. Each one ships a hover/focus tooltip and a
+  "Tabela" view, so no value is reachable only by hovering. Series colors come from the
+  `--viz-*` custom properties in `index.css`: hues are stepped per theme (not flipped)
+  and were validated for colorblind separation and contrast against the card surfaces,
+  so add a series by taking the next slot, never by inventing a hue.
 - No em dashes in written output.

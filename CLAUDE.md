@@ -40,8 +40,8 @@ frontend/
                                 # ProfitDistributions, Taxes, Config, Export, Login
   src/lib/                      # pb (client + formatters), useCollection, types, theme
   src/components/               # ui primitives, Layout,
-                                # OverviewSections (month + year blocks of the
-                                # landing page), charts (SVG chart kit)
+                                # OverviewSections (year strip + month cards of
+                                # the landing page), charts (SVG chart kit)
 docker-compose.yml, Makefile      # data backup lives OUTSIDE the repo (see below)
 ```
 
@@ -184,12 +184,26 @@ new platforms can be added in Config.
 - Dates are stored as PocketBase datetimes; the UI works with calendar dates and uses
   **local** time for "current month" logic (not UTC).
 - **Dashboard (`/`)** is the single landing page (the old "Visão geral" was merged into
-  it): quick actions, the month block, the year block (both in
-  `components/OverviewSections.tsx`) and the charts, each block collapsible.
+  it): a KPI strip for the year (the only full-width block), then one cell per subject
+  pairing the month's card with the chart that tells the same story (what is due above
+  the quarterly DARF, the R$50k invoice meter above monthly revenue, ...), most urgent
+  first. Every card shares one height and every chart another, and the chart is pinned
+  to the bottom of its cell, so the rows line up and no list has to scroll. No section
+  headers or collapse: the subtitle names the period and every month card repeats it.
+  The cards live in `components/OverviewSections.tsx`, one component each so the page
+  can interleave them. Creating records is not a button row on the page: each sidebar
+  entry that owns a collection carries a "+" that only shows while the pointer is on
+  that row (or the button has keyboard focus) and opens the page with `?new=1`.
+  It is kept dense on purpose: a number that needs a paragraph of context (the R$600k
+  IRRF quota, the quarterly assessment) is a hint here and gets the full explanation on
+  its own page.
+- **Config → Dados** holds everything about the data itself: backup JSON, CSV per
+  collection and the link to the PocketBase Admin (`/_/`).
 - **Charts** are hand-rolled SVG in `components/charts.tsx` (columns grouped/stacked,
   horizontal bars, line), no chart library. Each one ships a hover/focus tooltip and a
   "Tabela" view, so no value is reachable only by hovering. Series colors come from the
-  `--viz-*` custom properties in `index.css`: hues are stepped per theme (not flipped)
+  `--viz-*` custom properties in `index.css`; the current USD/BRL quote rides the
+  effective-rate line as a reference rule instead of a card of its own. Hues are stepped per theme (not flipped)
   and were validated for colorblind separation and contrast against the card surfaces,
   so add a series by taking the next slot, never by inventing a hue.
 - No em dashes in written output.

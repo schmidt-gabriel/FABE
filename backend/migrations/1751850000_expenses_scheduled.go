@@ -22,7 +22,7 @@ func init() {
 		)
 		if f, ok := col.Fields.GetByName("category").(*core.SelectField); ok {
 			f.Values = []string{
-				"Unimed", "Internet", "Contabilizei", "GoWork",
+				"HealthInsurance", "Internet", "Contabilizei", "GoWork",
 				"DARF INSS", "DARF CSLL", "DARF IRPJ", "IMPOSTO", "Outros",
 			}
 		}
@@ -36,7 +36,7 @@ func init() {
 		col.Fields.RemoveByName("paid")
 		if f, ok := col.Fields.GetByName("category").(*core.SelectField); ok {
 			f.Values = []string{
-				"Unimed", "Internet", "Contabilizei", "GoWork",
+				"HealthInsurance", "Internet", "Contabilizei", "GoWork",
 				"DARF INSS", "DARF CSLL", "DARF IRPJ", "Outros",
 			}
 		}

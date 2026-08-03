@@ -51,11 +51,11 @@
   ],
   "expenses": [
     { "id": "smpexpense00001", "date": "2026-01-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
-    { "id": "smpexpense00002", "date": "2026-01-10 00:00:00.000Z", "category": "UNIMED", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00002", "date": "2026-01-10 00:00:00.000Z", "category": "HEALTHINSURANCE", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
     { "id": "smpexpense00003", "date": "2026-01-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 295, "notes": "", "scheduled": false, "paid": true, "payment_type": "manual" },
     { "id": "smpexpense00004", "date": "2026-01-20 00:00:00.000Z", "category": "IMPOSTO", "amount": 712.33, "notes": "DARF INSS pro-labore", "scheduled": false, "paid": true, "payment_type": "manual" },
     { "id": "smpexpense00005", "date": "2026-02-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
-    { "id": "smpexpense00006", "date": "2026-02-10 00:00:00.000Z", "category": "UNIMED", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
+    { "id": "smpexpense00006", "date": "2026-02-10 00:00:00.000Z", "category": "HEALTHINSURANCE", "amount": 620.45, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
     { "id": "smpexpense00007", "date": "2026-02-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 295, "notes": "", "scheduled": false, "paid": true, "payment_type": "manual" },
     { "id": "smpexpense00008", "date": "2026-03-10 00:00:00.000Z", "category": "INTERNET", "amount": 149.9, "notes": "", "scheduled": false, "paid": true, "payment_type": "auto" },
     { "id": "smpexpense00009", "date": "2026-03-15 00:00:00.000Z", "category": "CONTABILIDADE", "amount": 444, "notes": "faixa R$50k-100k", "scheduled": false, "paid": true, "payment_type": "manual" },
@@ -64,7 +64,7 @@
   ],
   "recurring_services": [
     { "id": "smpservice00001", "name": "INTERNET", "exp_day": 10, "default_amount": 149.9, "payment_type": "auto" },
-    { "id": "smpservice00002", "name": "UNIMED", "exp_day": 10, "default_amount": 620.45, "payment_type": "auto" },
+    { "id": "smpservice00002", "name": "HEALTHINSURANCE", "exp_day": 10, "default_amount": 620.45, "payment_type": "auto" },
     { "id": "smpservice00003", "name": "CONTABILIDADE", "exp_day": 15, "default_amount": 295, "payment_type": "manual" },
     { "id": "smpservice00004", "name": "COWORKING", "exp_day": 14, "default_amount": 890, "payment_type": "manual" }
   ],

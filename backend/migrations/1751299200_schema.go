@@ -104,7 +104,7 @@ func init() {
 		expenses.Fields.Add(
 			&core.DateField{Name: "date", Required: true},
 			&core.SelectField{Name: "category", MaxSelect: 1, Required: true, Values: []string{
-				"Unimed", "Internet", "Contabilizei", "GoWork",
+				"HealthInsurance", "Internet", "Contabilizei", "GoWork",
 				"DARF INSS", "DARF CSLL", "DARF IRPJ", "Outros",
 			}},
 			&core.NumberField{Name: "amount", Required: true, Min: ptr(0.0)},

@@ -20,13 +20,16 @@ export default function Imports() {
   const platforms = usePlatformNames();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Reacts to the query string, not just to mounting: the sidebar "+" links
+  // here with ?new=1, and it has to open the form even when this page is
+  // already the one on screen.
   useEffect(() => {
     if (searchParams.get("new") === "1") {
       openNew();
       setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   // Effective rate = BRL received / USD sent (embeds the platform fee).
   const effectiveRate = (() => {

@@ -155,27 +155,6 @@ export default function Account() {
         </form>
       </Card>
 
-      <Card className="p-6 lg:col-span-2">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-              Banco de dados
-            </h2>
-            <p className="text-xs text-neutral-400 dark:text-neutral-500">
-              PocketBase Admin: coleções, registros e configurações do servidor.
-              Mesmo email e senha desta conta.
-            </p>
-          </div>
-          <a
-            href="/_/"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            Abrir PocketBase Admin ↗
-          </a>
-        </div>
-      </Card>
     </div>
   );
 }

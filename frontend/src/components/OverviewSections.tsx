@@ -1,16 +1,17 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear } from "../lib/year";
 import type { Client, Expense, ImportRecord, ProfitDistribution, RecurringService, Remittance } from "../lib/types";
 import { expensePaid, IRRF_MONTHLY_LIMIT, IRRF_START_YEAR, suggestedIrrf } from "../lib/types";
-import { pb, brl, usd } from "../lib/pb";
-import { Button, Card } from "./ui";
+import { pb, brl, usd, fmtDate } from "../lib/pb";
+import { Card } from "./ui";
 
-// The month and year blocks of the old "Visão geral" page. They live here as
-// components because the Dashboard is now a single page: quick actions, the
-// month block, the year block and the charts, one below the other.
+// The non-chart half of the Dashboard: one KPI strip for the year, then the
+// month cards (three meters + what is due and what is coming in). No section
+// headers or collapse: every card names its own period, and the numbers that
+// would need a paragraph of context live on their own page (Distribuição de
+// Lucros explains the R$600k quota, Impostos the assessment).
+
 const MONTHLY_LIMIT = 50000; // R$50k/month of invoices: where the accounting fee tier jumps
 const ANNUAL_REFUND_LIMIT = 600000; // refundable in IRPF if yearly income stays below this
 const yearOf = (d?: string) => (d ? Number(d.slice(0, 4)) : 0);
@@ -20,266 +21,96 @@ const sum = <T,>(rows: T[] | undefined, pick: (r: T) => number, year: number, da
 const sumMonth = <T,>(rows: T[] | undefined, pick: (r: T) => number, ym: string, date: (r: T) => string) =>
   (rows ?? []).filter((r) => monthOf(date(r)) === ym).reduce((s, r) => s + pick(r), 0);
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-neutral-500 dark:text-neutral-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
-      {hint && <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">{hint}</p>}
-    </Card>
-  );
-}
-
 // Accounting monthly fee tier by the month's invoiced revenue (faturamento).
 // Source: contador's "Tabela de cobrança de faturamento extra".
 const accountingFee = (f: number) =>
   f <= 50000 ? 295 : f <= 100000 ? 444 : f <= 1000000 ? 622 : 918;
 
-// Notas fiscais: the R$50k mark is where the accounting mensalidade jumps
-// (R$295 up to R$50k, R$444 above), not a legal cap.
-function InvoiceFeeCard({ used }: { used: number }) {
-  const fee = accountingFee(used);
-  const over50 = used > MONTHLY_LIMIT;
-  const pct = Math.min(100, (used / MONTHLY_LIMIT) * 100);
+// The month the sidebar is pointing at, clamped to the latest available one
+// (this month, or December in a past year). Shared by the page header and the
+// month cards, so both always name the same month.
+export function useSelectedMonth() {
+  const { year, month } = useYear();
+  const now = new Date();
+  const maxMonth = year === now.getFullYear() ? now.getMonth() : 11;
+  const index = Math.min(Number(month) - 1, maxMonth);
+  return {
+    year,
+    index,
+    name: MONTHS[index],
+    ym: `${year}-${String(index + 1).padStart(2, "0")}`,
+  };
+}
+
+// Every card that sits on top of a chart uses this height, so the cells of the
+// grid line up: the meters stretch into it, the lists scroll inside it.
+// Shared floor for the cards that sit on top of a chart: the short ones (the
+// meters) all render at exactly this height, and a longer list grows past it
+// instead of scrolling. The charts below are pinned to the bottom of the cell,
+// so the row still lines up.
+const CARD_H = "min-h-[168px]";
+
+// One cell of the year strip.
+function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card className="p-5">
-      <p className="text-sm text-neutral-500 dark:text-neutral-400">
-        Notas fiscais (faturamento do mês)
-      </p>
-      <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-        {brl(used)}
-        <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500"> faturado</span>
-      </p>
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-        <div
-          className={`h-full ${over50 ? "bg-amber-500" : "bg-emerald-500"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-        {over50
-          ? `${brl(used - MONTHLY_LIMIT)} acima de ${brl(MONTHLY_LIMIT)}`
-          : `Faltam ${brl(MONTHLY_LIMIT - used)} para ${brl(MONTHLY_LIMIT)}`}
-      </p>
-      <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-        Mensalidade contábil: {brl(fee)}. Acima de {brl(MONTHLY_LIMIT)}/mês sobe para {brl(444)}.
-      </p>
-    </Card>
+    <div className="bg-white px-4 py-3 dark:bg-neutral-900">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">{hint}</p>}
+    </div>
   );
 }
 
-// Total of the month's paid expenses, next to the invoice/distribution cards.
-function MonthExpensesCard({ total }: { total: number }) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-neutral-500 dark:text-neutral-400">Despesas do mês</p>
-      <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-        {brl(total)}
-        <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500"> pago</span>
-      </p>
-      <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-        Soma das despesas pagas no mês.
-      </p>
-    </Card>
-  );
-}
-
-// Profit distribution: above R$50k/month the full month's amount is taxed at
-// 10% IRRF (alta renda). It is not a hard cap, so we show the withholding.
-// `irrf` is the sum of what the records themselves recorded as withheld (the
-// source of truth); `expected` is what the 10% rule would charge, shown only
-// when the two disagree.
-function DistributionMonthCard({
-  used,
-  irrf,
-  expected,
-  applyIrrf,
-}: {
-  used: number;
-  irrf: number;
-  expected: number;
-  applyIrrf: boolean;
-}) {
-  const overLimit = used > IRRF_MONTHLY_LIMIT;
-  const over = applyIrrf && irrf > 0;
-  const diverges = applyIrrf && Math.abs(irrf - expected) >= 0.01;
-  const pct = Math.min(100, (used / IRRF_MONTHLY_LIMIT) * 100);
-  return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">Distribuição de lucros</p>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            over
-              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
-          }`}
-        >
-          {over ? "IRRF 10%" : "Isento"}
-        </span>
-      </div>
-      <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-        {brl(used)}
-        <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500"> distribuído</span>
-      </p>
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-        <div className={`h-full ${over ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-        {overLimit
-          ? `${brl(used - IRRF_MONTHLY_LIMIT)} acima de ${brl(IRRF_MONTHLY_LIMIT)}`
-          : `Faltam ${brl(IRRF_MONTHLY_LIMIT - used)} para ${brl(IRRF_MONTHLY_LIMIT)}`}
-      </p>
-      <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-        {over ? `IRRF retido ${brl(irrf)}` : "Isento"} · isenção até {brl(IRRF_MONTHLY_LIMIT)}/mês
-        {diverges && ` · pela regra: ${brl(expected)}`}
-      </p>
-    </Card>
-  );
-}
-
-// Sum the year's distributions. The withheld IRRF is the sum of what each
-// record recorded (profit_distributions.irrf is the source of truth, so a DARF
-// that came out different from the rule is reported as it really was);
-// `expected` is what the 10% rule would charge on every month above R$50k (the
-// base is the full month, per Lei 15.270/2025), kept only to flag divergence.
-function annualDistribution(rows: ProfitDistribution[] | undefined, year: number) {
-  const byMonth: Record<string, number> = {};
-  const inYear = (rows ?? []).filter((r) => yearOf(r.month) === year);
-  inYear.forEach((r) => {
-    const m = monthOf(r.month);
-    byMonth[m] = (byMonth[m] ?? 0) + r.amount;
-  });
-  const taxable = year >= IRRF_START_YEAR;
-  const total = Object.values(byMonth).reduce((s, v) => s + v, 0);
-  const irrf = inYear.reduce((s, r) => s + (r.irrf ?? 0), 0);
-  const expected = Object.values(byMonth).reduce((s, v) => s + suggestedIrrf(v, year), 0);
-  return { total, irrf, expected, taxable };
-}
-
-// Collapsible section state, remembered per block (same localStorage keys the
-// old Visão geral used, so a collapsed block stays collapsed after the merge).
-function useCollapse(key: string) {
-  const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
-  const toggle = () =>
-    setOpen((v) => {
-      localStorage.setItem(key, v ? "0" : "1");
-      return !v;
-    });
-  return [open, toggle] as const;
-}
-
-export function SectionToggle({
-  open,
-  onToggle,
+// A month value against its R$50k mark.
+function Meter({
   label,
+  value,
+  badge,
+  pct,
+  over,
+  hint,
 }: {
-  open: boolean;
-  onToggle: () => void;
   label: string;
+  value: string;
+  badge?: string;
+  pct?: number;
+  over?: boolean;
+  hint: string;
 }) {
   return (
-    <button
-      onClick={onToggle}
-      className="flex items-center gap-1.5 text-sm font-semibold text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-      aria-expanded={open}
-    >
-      <svg
-        className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`}
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path d="M6 4l4 4-4 4V4z" />
-      </svg>
-      {label}
-    </button>
-  );
-}
-
-// The "+ Remessa / + Nota fiscal / ..." row at the top of the page.
-export function QuickActions() {
-  const navigate = useNavigate();
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button variant="ghost" onClick={() => navigate("/remessas?new=1")}>
-        + Remessa
-      </Button>
-      <Button variant="ghost" onClick={() => navigate("/importacoes?new=1")}>
-        + Nota fiscal
-      </Button>
-      <Button variant="ghost" onClick={() => navigate("/despesas?new=1")}>
-        + Despesa
-      </Button>
-      <Button variant="ghost" onClick={() => navigate("/lucros?new=1")}>
-        + Distribuição de lucro
-      </Button>
-    </div>
-  );
-}
-
-// Everything scoped to the month selected in the sidebar: what is due, what is
-// still coming in, and the three limit cards.
-export function MonthSection() {
-  const now0 = new Date();
-  const { year, month } = useYear(); // global, selected in the sidebar
-  const [open, toggle] = useCollapse("overview-month-section");
-
-  const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
-  const expenses = useCollection<Expense>("expenses", { sort: "-date" });
-  const dist = useCollection<ProfitDistribution>("profit_distributions", { sort: "-month" });
-
-  // A month past the latest available one (this month, or December for past
-  // years) is clamped down to it.
-  const maxMonth = year === now0.getFullYear() ? now0.getMonth() : 11;
-  const selMonth = Math.min(Number(month) - 1, maxMonth);
-  const ym = `${year}-${String(selMonth + 1).padStart(2, "0")}`;
-
-  const invoiceUsed = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
-  const distUsed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
-  // Withheld IRRF as recorded on the distributions themselves, not recomputed.
-  const distIrrf = sumMonth(dist.list.data, (r) => r.irrf ?? 0, ym, (r) => r.month);
-  // Total of the month's paid expenses (scheduled ones only once paid).
-  const despesasMes = sumMonth(
-    (expenses.list.data ?? []).filter(expensePaid),
-    (r) => r.amount,
-    ym,
-    (r) => r.date,
-  );
-
-  return (
-    <div className="space-y-6">
-      {/* Month comes from the sidebar selector; shown here for context. */}
-      <SectionToggle open={open} onToggle={toggle} label={`Mês de ${MONTHS[selMonth]}`} />
-
-      {open && (
-        <>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <UpcomingPayments ym={ym} />
-            <Receivables ym={ym} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <InvoiceFeeCard used={invoiceUsed} />
-            <DistributionMonthCard
-              used={distUsed}
-              irrf={distIrrf}
-              expected={suggestedIrrf(distUsed, year)}
-              applyIrrf={year >= IRRF_START_YEAR}
-            />
-            <MonthExpensesCard total={despesasMes} />
-          </div>
-        </>
+    <Card className={`flex ${CARD_H} flex-col p-4`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
+        {badge && (
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              over
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+            }`}
+          >
+            {badge}
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 text-xl font-semibold text-neutral-900 dark:text-neutral-100">{value}</p>
+      {pct !== undefined && (
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+          <div
+            className={`h-full ${over ? "bg-amber-500" : "bg-emerald-500"}`}
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
       )}
-    </div>
+      <p className="mt-auto pt-1.5 text-[11px] text-neutral-400 dark:text-neutral-500">{hint}</p>
+    </Card>
   );
 }
 
-// The year's totals: revenue, expenses, taxes, distributed profit and the FX
-// quote used to estimate what is still to be brought in.
-export function YearSection() {
-  const { year } = useYear();
-  const [open, toggle] = useCollapse("overview-year-summary");
+// The year in six numbers. Everything that used to take a card of its own
+// (annual distribution, FX quote, total received) is a hint here.
+export function YearSummary() {
+  const { year } = useYear(); // global, selected in the sidebar
 
   const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
@@ -298,7 +129,7 @@ export function YearSection() {
   });
 
   // The quote comes from a third party, so a failed call is retried and the
-  // last good value is kept on screen instead of blanking the card.
+  // last good value is kept on screen instead of blanking the number.
   const fx = useQuery<{ rate: number; date: string; stale?: boolean }>({
     queryKey: ["fx-latest"],
     queryFn: async () => {
@@ -326,125 +157,176 @@ export function YearSection() {
   const liquido = bruto - despesas;
   const toBring = receivedUsd - importedUsd;
   const rate = fx.data?.rate ?? 0;
-  // Rate used to approximate "valor a trazer" in BRL. The market quote is
-  // preferred, but when AwesomeAPI is unreachable the effective rate of the
-  // year's own imports (BRL received ÷ USD sent, fees included) keeps the
-  // estimate on screen, and is arguably closer to what will actually land.
+  // The market quote is preferred, but when AwesomeAPI is unreachable the
+  // effective rate of the year's own imports (BRL received ÷ USD sent, fees
+  // included) keeps the estimate on screen.
   const effectiveRate = importedUsd > 0 ? bruto / importedUsd : 0;
   const estimateRate = rate || effectiveRate;
-  const estimateSource = rate ? `cotação ${rate.toFixed(4)}` : `câmbio efetivo ${effectiveRate.toFixed(4)}`;
   const annualDist = annualDistribution(dist.list.data, year);
+  const yearTotal = tax.data?.year_total ?? 0;
 
   return (
-    <div className="space-y-6">
-      <SectionToggle open={open} onToggle={toggle} label={`Resumo de ${year}`} />
-
-      {open && (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat
-              label="Bruto (importado)"
-              value={brl(bruto)}
-              hint={
-                receivedUsd > 0
-                  ? `${((importedUsd / receivedUsd) * 100).toFixed(1)}% do recebido convertido`
-                  : "nada recebido no ano"
-              }
-            />
-            <Stat
-              label="Líquido (bruto − despesas)"
-              value={brl(liquido)}
-              hint={`Despesas: ${brl(despesas)}${bruto > 0 ? ` · margem de ${((liquido / bruto) * 100).toFixed(1)}%` : ""}`}
-            />
-            <Stat
-              label="Valor a trazer"
-              value={usd(toBring)}
-              hint={
-                estimateRate
-                  ? `≈ ${brl(toBring * estimateRate)} (aproximado · ${estimateSource})`
-                  : "recebido − importado"
-              }
-            />
-            <Stat label="Impostos do ano (apuração)" value={brl(tax.data?.year_total ?? 0)} />
-          </div>
-
-          {/* The IRRF alta renda details only apply from 2026 on; earlier years
-              show just the annual total. */}
-          <Card className="p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                Distribuição de lucros no ano · {year}
-              </p>
-              {annualDist.taxable && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    annualDist.total > ANNUAL_REFUND_LIMIT
-                      ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
-                  }`}
-                >
-                  {annualDist.total > ANNUAL_REFUND_LIMIT ? "Acima de R$600k" : "IRRF restituível"}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-100">
-              {brl(annualDist.total)}
-              {annualDist.taxable && (
-                <span className="text-sm font-normal text-neutral-400 dark:text-neutral-500">
-                  {" "}
-                  de {brl(ANNUAL_REFUND_LIMIT)}
-                </span>
-              )}
-            </p>
-            {annualDist.taxable && (
-              <>
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-                  <div
-                    className={`h-full ${annualDist.total > ANNUAL_REFUND_LIMIT ? "bg-red-500" : "bg-emerald-500"}`}
-                    style={{ width: `${Math.min(100, (annualDist.total / ANNUAL_REFUND_LIMIT) * 100)}%` }}
-                  />
-                </div>
-                <p className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">
-                  IRRF alta renda retido no ano:{" "}
-                  <span className="font-semibold">{brl(annualDist.irrf)}</span>
-                </p>
-                <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-                  Soma do IRRF registrado em cada distribuição (DARF cód. 1841): 10% sobre o total dos
-                  meses acima de {brl(IRRF_MONTHLY_LIMIT)}.
-                  {Math.abs(annualDist.irrf - annualDist.expected) >= 0.01 &&
-                    ` Pela regra seriam ${brl(annualDist.expected)}; confira os valores em Distribuição de Lucros.`}{" "}
-                  Restituível na declaração anual (IRPF) se o total anual de rendimentos ficar abaixo de{" "}
-                  {brl(ANNUAL_REFUND_LIMIT)}.
-                </p>
-              </>
-            )}
-          </Card>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Stat
-              label="Cotação atual (USD/BRL)"
-              value={rate ? rate.toFixed(4) : fx.isLoading ? "…" : "—"}
-              hint={
-                fx.data?.date
-                  ? `fonte: AwesomeAPI · ${fx.data.date}${fx.data.stale ? " (desatualizada)" : ""}`
-                  : fx.isError
-                    ? "cotação indisponível no momento"
-                    : undefined
-              }
-            />
-            <Stat
-              label="Total recebido (remessas)"
-              value={usd(receivedUsd)}
-              hint={`${usd(importedUsd)} já importados`}
-            />
-          </div>
-        </>
-      )}
-    </div>
+    <Card className="grid grid-cols-2 gap-px overflow-hidden bg-neutral-100 sm:grid-cols-3 lg:grid-cols-6 dark:bg-neutral-800">
+      <Kpi
+        label="Faturamento"
+        value={brl(bruto)}
+        hint={receivedUsd > 0 ? `${((importedUsd / receivedUsd) * 100).toFixed(0)}% do recebido convertido` : undefined}
+      />
+      <Kpi label="Despesas" value={brl(despesas)} hint="pagas no ano" />
+      <Kpi
+        label="Líquido"
+        value={brl(liquido)}
+        hint={bruto > 0 ? `margem de ${((liquido / bruto) * 100).toFixed(1)}%` : undefined}
+      />
+      <Kpi
+        label="Impostos (apuração)"
+        value={brl(yearTotal)}
+        hint={bruto > 0 ? `${((yearTotal / bruto) * 100).toFixed(1)}% do faturamento` : undefined}
+      />
+      <Kpi
+        label="Lucros distribuídos"
+        value={brl(annualDist.total)}
+        hint={
+          annualDist.taxable
+            ? `IRRF ${brl(annualDist.irrf)} · ${((annualDist.total / ANNUAL_REFUND_LIMIT) * 100).toFixed(0)}% da cota de R$600k${
+                Math.abs(annualDist.irrf - annualDist.expected) >= 0.01
+                  ? ` · pela regra ${brl(annualDist.expected)}`
+                  : ""
+              }`
+            : undefined
+        }
+      />
+      <Kpi
+        label="A trazer"
+        value={usd(toBring)}
+        hint={
+          estimateRate
+            ? `≈ ${brl(toBring * estimateRate)} · cotação ${(rate || effectiveRate).toFixed(4)}${rate ? (fx.data?.stale ? " (desatualizada)" : "") : " (efetiva)"}`
+            : `de ${usd(receivedUsd)} recebidos`
+        }
+      />
+    </Card>
   );
 }
 
-function UpcomingPayments({ ym }: { ym: string }) {
+// Sum the year's distributions. The withheld IRRF is the sum of what each
+// record recorded (profit_distributions.irrf is the source of truth, so a DARF
+// that came out different from the rule is reported as it really was);
+// `expected` is what the 10% rule would charge on every month above R$50k (the
+// base is the full month, per Lei 15.270/2025), kept only to flag divergence.
+function annualDistribution(rows: ProfitDistribution[] | undefined, year: number) {
+  const byMonth: Record<string, number> = {};
+  const inYear = (rows ?? []).filter((r) => yearOf(r.month) === year);
+  inYear.forEach((r) => {
+    const m = monthOf(r.month);
+    byMonth[m] = (byMonth[m] ?? 0) + r.amount;
+  });
+  const taxable = year >= IRRF_START_YEAR;
+  const total = Object.values(byMonth).reduce((s, v) => s + v, 0);
+  const irrf = inYear.reduce((s, r) => s + (r.irrf ?? 0), 0);
+  const expected = Object.values(byMonth).reduce((s, v) => s + suggestedIrrf(v, year), 0);
+  return { total, irrf, expected, taxable };
+}
+
+// The month cards are separate components so the page can pair each one with
+// the chart that tells the same story (meter on top, chart below). They each
+// read the month from the sidebar and their own collection; the queries are
+// shared by TanStack Query, so this costs no extra requests.
+
+// Lowercase: the month is read inline in a label ("Notas fiscais · agosto"),
+// never as a heading.
+const useMonthLabel = () => useSelectedMonth().name.toLowerCase();
+
+export function InvoiceMeter() {
+  const { ym } = useSelectedMonth();
+  const monthName = useMonthLabel();
+  const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
+  const invoiced = sumMonth(imports.list.data, (r) => r.amount_brl, ym, (r) => r.convert_day);
+  const over = invoiced > MONTHLY_LIMIT;
+  return (
+    <Meter
+      label={`Notas fiscais · ${monthName}`}
+      value={brl(invoiced)}
+      pct={(invoiced / MONTHLY_LIMIT) * 100}
+      over={over}
+      hint={`${
+        over
+          ? `${brl(invoiced - MONTHLY_LIMIT)} acima de R$50k`
+          : `faltam ${brl(MONTHLY_LIMIT - invoiced)} para R$50k`
+      } · contábil ${brl(accountingFee(invoiced))}`}
+    />
+  );
+}
+
+export function DistributionMeter() {
+  const { year, ym } = useSelectedMonth();
+  const monthName = useMonthLabel();
+  const dist = useCollection<ProfitDistribution>("profit_distributions", { sort: "-month" });
+  const distributed = sumMonth(dist.list.data, (r) => r.amount, ym, (r) => r.month);
+  // Withheld IRRF as recorded on the distributions themselves, not recomputed.
+  const irrf = sumMonth(dist.list.data, (r) => r.irrf ?? 0, ym, (r) => r.month);
+  const expected = suggestedIrrf(distributed, year);
+  const taxed = year >= IRRF_START_YEAR && irrf > 0;
+  const diverges = year >= IRRF_START_YEAR && Math.abs(irrf - expected) >= 0.01;
+  return (
+    <Meter
+      label={`Distribuição de lucros · ${monthName}`}
+      value={brl(distributed)}
+      badge={taxed ? "IRRF 10%" : "Isento"}
+      pct={(distributed / IRRF_MONTHLY_LIMIT) * 100}
+      over={taxed}
+      hint={
+        taxed
+          ? `IRRF retido ${brl(irrf)}${diverges ? ` · pela regra ${brl(expected)}` : ""}`
+          : `faltam ${brl(Math.max(0, IRRF_MONTHLY_LIMIT - distributed))} para R$50k`
+      }
+    />
+  );
+}
+
+export function ExpensesMeter() {
+  const { ym } = useSelectedMonth();
+  const monthName = useMonthLabel();
+  const expenses = useCollection<Expense>("expenses", { sort: "-date" });
+  const spent = sumMonth(
+    (expenses.list.data ?? []).filter(expensePaid),
+    (r) => r.amount,
+    ym,
+    (r) => r.date,
+  );
+  return <Meter label={`Despesas · ${monthName}`} value={brl(spent)} hint="Pagas no mês" />;
+}
+
+// Sits above the effective-rate chart: the conversion that produced the last
+// point on that line, spelled out.
+export function LastImport() {
+  const { year } = useYear();
+  const imports = useCollection<ImportRecord>("imports", { sort: "-convert_day" });
+  const last = (imports.list.data ?? []).find((r) => yearOf(r.convert_day) === year);
+  if (!last) {
+    return (
+      <Meter
+        label="Última importação"
+        value="—"
+        hint={`nenhuma conversão registrada em ${year}`}
+      />
+    );
+  }
+  const effective = last.amount_usd > 0 ? last.amount_brl / last.amount_usd : 0;
+  return (
+    <Meter
+      label={`Última importação · ${fmtDate(last.convert_day)}`}
+      value={brl(last.amount_brl)}
+      hint={`${usd(last.amount_usd)}${effective ? ` a ${effective.toFixed(4)}` : ""}${
+        last.platform ? ` · ${last.platform}` : ""
+      }`}
+    />
+  );
+}
+
+export function UpcomingPayments() {
+  const { ym } = useSelectedMonth();
+  const monthName = useMonthLabel();
   const services = useCollection<RecurringService>("recurring_services", { sort: "exp_day" });
   const expenses = useCollection<Expense>("expenses", { sort: "-date" });
 
@@ -517,20 +399,20 @@ function UpcomingPayments({ ym }: { ym: string }) {
   };
 
   return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-neutral-100 px-4 py-2.5 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-          Próximos pagamentos
+    <Card className={`flex ${CARD_H} flex-col overflow-hidden`}>
+      <div className="border-b border-neutral-100 px-4 py-2 dark:border-neutral-800">
+        <h2 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+          Próximos pagamentos · {monthName}
         </h2>
       </div>
-      <div className="grid grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
+      <div className="grid auto-rows-min grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
         {items.map((it) => {
           const st = status(it);
           const overdue = !it.paid && ym <= currentYm && day > it.day;
           return (
             <div
               key={it.key}
-              className={`flex items-center justify-between gap-3 px-4 py-2 ${
+              className={`flex items-center justify-between gap-3 px-4 py-1.5 ${
                 overdue ? "bg-red-50 dark:bg-red-950/30" : "bg-white dark:bg-neutral-900"
               }`}
             >
@@ -562,7 +444,9 @@ const HOURS_PER_MONTH = 160;
 const monthlyReference = (c: Client) =>
   !c.monthly_amount ? 0 : c.billing_type === "hourly" ? c.monthly_amount * HOURS_PER_MONTH : c.monthly_amount;
 
-function Receivables({ ym }: { ym: string }) {
+export function Receivables() {
+  const { ym } = useSelectedMonth();
+  const monthName = useMonthLabel();
   const clients = useCollection<Client>("clients", { sort: "name" });
   const remittances = useCollection<Remittance>("remittances", { sort: "-pay_day" });
   const rems = remittances.list.data ?? [];
@@ -593,16 +477,19 @@ function Receivables({ ym }: { ym: string }) {
       return { c, expected, received, remaining: Math.max(0, expected - received) };
     });
 
-  if (!rows.length) return null;
-
   return (
-    <Card className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-neutral-100 px-4 py-2.5 dark:border-neutral-800">
-        <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-          A receber no mês
+    <Card className={`flex ${CARD_H} flex-col overflow-hidden`}>
+      <div className="border-b border-neutral-100 px-4 py-2 dark:border-neutral-800">
+        <h2 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+          A receber · {monthName}
         </h2>
       </div>
-      <div className="grid flex-1 auto-rows-fr grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
+      {!rows.length && (
+        <p className="px-4 py-3 text-sm text-neutral-400 dark:text-neutral-500">
+          Nenhum cliente com valor mensal neste mês.
+        </p>
+      )}
+      <div className="grid auto-rows-min grid-cols-1 gap-px bg-neutral-100 dark:bg-neutral-800">
         {rows.map(({ c, expected, received, remaining }) => {
           const done = remaining <= 0;
           // Past months are settled (holidays, fewer hours), so the shortfall
@@ -612,7 +499,7 @@ function Receivables({ ym }: { ym: string }) {
           return (
             <div
               key={c.id}
-              className="flex flex-col justify-center bg-white px-4 py-2 dark:bg-neutral-900"
+              className="flex flex-col justify-center bg-white px-4 py-1.5 dark:bg-neutral-900"
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
@@ -633,7 +520,7 @@ function Receivables({ ym }: { ym: string }) {
                   {done ? "completo" : past ? `−${usd(remaining)}` : `falta ${usd(remaining)}`}
                 </p>
               </div>
-              <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
                 <div
                   className={`h-full ${
                     done ? "bg-emerald-500" : past ? "bg-neutral-300 dark:bg-neutral-600" : "bg-amber-500"

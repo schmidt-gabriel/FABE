@@ -96,7 +96,7 @@ export interface RecurringService extends BaseRecord {
 }
 
 export const EXPENSE_CATEGORIES = [
-  "Unimed",
+  "HealthInsurance",
   "Internet",
   "Contabilizei",
   "GoWork",

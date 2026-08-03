@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { pb } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear, yearOptions } from "../lib/year";
@@ -8,21 +8,56 @@ import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
 // Pages driven by the sidebar month filter, separated from the annual ones.
 const navMonthly = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/remessas", label: "Remessas" },
-  { to: "/importacoes", label: "Notas Fiscais" },
-  { to: "/despesas", label: "Despesas" },
+  { to: "/remessas", label: "Remessas", newTo: "/remessas?new=1" },
+  { to: "/importacoes", label: "Notas Fiscais", newTo: "/importacoes?new=1" },
+  { to: "/despesas", label: "Despesas", newTo: "/despesas?new=1" },
 ];
 const navAnnual = [
-  { to: "/lucros", label: "Distribuição de Lucros" },
+  { to: "/lucros", label: "Distribuição de Lucros", newTo: "/lucros?new=1" },
   { to: "/impostos", label: "Impostos" },
 ];
 
+type NavItem = { to: string; label: string; end?: boolean; newTo?: string };
+
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `block rounded-lg px-3 py-2 text-sm font-medium ${
+  `block rounded-lg py-2 pl-3 pr-8 text-sm font-medium ${
     isActive
       ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
       : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
   }`;
+
+// Each row that can create a record carries a "+" at its right edge. It is
+// hidden until the pointer is over the row (or the button takes keyboard
+// focus, so it stays reachable without a mouse) and goes solid on hover. It
+// sits beside the link, not inside it, so the two targets stay separate.
+function NavRow({ item }: { item: NavItem }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const active = item.end ? pathname === item.to : pathname.startsWith(item.to);
+  return (
+    <div className="group relative">
+      <NavLink to={item.to} end={item.end} className={linkClass}>
+        {item.label}
+      </NavLink>
+      {item.newTo && (
+        <button
+          onClick={() => navigate(item.newTo!)}
+          aria-label={`Novo registro em ${item.label}`}
+          title={`Novo registro em ${item.label}`}
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 opacity-0 transition group-hover:opacity-50 hover:opacity-100 focus-visible:opacity-100 ${
+            active
+              ? "text-white hover:bg-white/20 dark:text-neutral-900 dark:hover:bg-black/15"
+              : "text-neutral-500 hover:bg-neutral-200 dark:text-neutral-400 dark:hover:bg-neutral-700"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
 
 function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme());
@@ -125,15 +160,11 @@ export default function Layout() {
           <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
           <nav className="flex-1 space-y-1">
             {navMonthly.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
-                {item.label}
-              </NavLink>
+              <NavRow key={item.to} item={item} />
             ))}
             <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
             {navAnnual.map((item) => (
-              <NavLink key={item.to} to={item.to} className={linkClass}>
-                {item.label}
-              </NavLink>
+              <NavRow key={item.to} item={item} />
             ))}
           </nav>
 

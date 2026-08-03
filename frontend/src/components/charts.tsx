@@ -87,6 +87,7 @@ function ChartFrame({
   series,
   data,
   format,
+  className = "",
   children,
 }: {
   title: string;
@@ -94,29 +95,32 @@ function ChartFrame({
   series: Series[];
   data: Datum[];
   format: (v: number) => string;
+  className?: string;
   children: ReactNode;
 }) {
   const [table, setTable] = useState(false);
   return (
-    <Card className="viz p-5">
+    <Card className={`viz p-4 ${className}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{title}</h2>
-          {subtitle && (
-            <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">{subtitle}</p>
-          )}
+          {/* Rendered even when empty: every chart card is the same height. */}
+          <p className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+            {subtitle ?? "\u00A0"}
+          </p>
         </div>
         <button
           onClick={() => setTable((v) => !v)}
-          className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+          className="shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
         >
           {table ? "Gráfico" : "Tabela"}
         </button>
       </div>
 
-      {series.length > 1 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-          {series.map((s) => (
+      {/* Same here: the row is always there, filled only for 2+ series. */}
+      <div className="mt-2 flex min-h-4 flex-wrap gap-x-4 gap-y-1">
+        {series.length > 1 &&
+          series.map((s) => (
             <span
               key={s.key}
               className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400"
@@ -125,10 +129,9 @@ function ChartFrame({
               {s.label}
             </span>
           ))}
-        </div>
-      )}
+      </div>
 
-      <div className="mt-3">
+      <div className="mt-2">
         {table ? (
           <div className="max-h-72 overflow-auto">
             <table className="w-full text-sm">
@@ -178,7 +181,8 @@ export function ColumnChart({
   tick,
   stacked = false,
   threshold,
-  height = 250,
+  height = 210,
+  className,
 }: {
   title: string;
   subtitle?: string;
@@ -189,6 +193,7 @@ export function ColumnChart({
   stacked?: boolean;
   threshold?: { value: number; label: string };
   height?: number;
+  className?: string;
 }) {
   const [tip, setTip] = useState<Tip | null>(null);
   const plotW = W - PAD.left - PAD.right;
@@ -210,7 +215,14 @@ export function ColumnChart({
     series.map((s, i) => ({ label: s.label, color: s.color, value: format(d.values[i] ?? 0) }));
 
   return (
-    <ChartFrame title={title} subtitle={subtitle} series={series} data={data} format={format}>
+    <ChartFrame
+      title={title}
+      subtitle={subtitle}
+      series={series}
+      data={data}
+      format={format}
+      className={className}
+    >
       {!data.length ? (
         <Empty height={height} />
       ) : (
@@ -352,23 +364,35 @@ export function BarChart({
   data,
   color,
   format,
+  height = 210,
+  className,
 }: {
   title: string;
   subtitle?: string;
   data: Datum[];
   color: string;
   format: (v: number) => string;
+  height?: number;
+  className?: string;
 }) {
   const series: Series[] = [{ key: "v", label: "Valor", color }];
-  const rowH = 30;
-  const height = Math.max(rowH * data.length + 16, 80);
+  // Rows share the same box as every other chart, so a short list spreads out
+  // instead of making its card shorter than the one beside it.
+  const rowH = Math.min(34, (height - 16) / Math.max(data.length, 1));
   const labelW = 150;
   const valueW = 96;
   const plotW = W - labelW - valueW;
   const peak = Math.max(...data.map((d) => d.values[0] ?? 0), 0) || 1;
 
   return (
-    <ChartFrame title={title} subtitle={subtitle} series={series} data={data} format={format}>
+    <ChartFrame
+      title={title}
+      subtitle={subtitle}
+      series={series}
+      data={data}
+      format={format}
+      className={className}
+    >
       {!data.length ? (
         <Empty height={160} />
       ) : (
@@ -376,7 +400,7 @@ export function BarChart({
           {data.map((d, i) => {
             const v = d.values[0] ?? 0;
             const w = (v / peak) * plotW;
-            const y = 8 + i * rowH;
+            const y = 8 + i * rowH + (rowH - 22) / 2;
             return (
               <g key={d.label}>
                 <text x={0} y={y + 15} className="fill-[var(--viz-ink)] text-[12px]">
@@ -414,7 +438,9 @@ export function LineChart({
   label,
   format,
   tick,
-  height = 250,
+  height = 210,
+  reference,
+  className,
 }: {
   title: string;
   subtitle?: string;
@@ -424,14 +450,19 @@ export function LineChart({
   format: (v: number) => string;
   tick: (v: number) => string;
   height?: number;
+  // A rule across the plot (the current market quote, next to the effective
+  // rates the imports actually converted at). Unlabelled inside the plot: the
+  // subtitle says what it is.
+  reference?: { value: number };
+  className?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const series: Series[] = [{ key: "v", label, color }];
   const plotW = W - PAD.left - PAD.right;
   const plotH = height - PAD.top - PAD.bottom;
   const values = data.map((d) => d.values[0] ?? 0);
-  const max = Math.max(...values, 0);
-  const min = Math.min(...values, max);
+  const max = Math.max(...values, reference?.value ?? 0);
+  const min = Math.min(...values, reference?.value ?? max, max);
   // A rate never starts at zero: frame the actual range with a little air.
   const lo = min - (max - min) * 0.25 || min * 0.98;
   const hi = max + (max - min) * 0.15 || max * 1.02;
@@ -445,7 +476,14 @@ export function LineChart({
   const every = Math.ceil(data.length / 8);
 
   return (
-    <ChartFrame title={title} subtitle={subtitle} series={series} data={data} format={format}>
+    <ChartFrame
+      title={title}
+      subtitle={subtitle}
+      series={series}
+      data={data}
+      format={format}
+      className={className}
+    >
       {!data.length ? (
         <Empty height={height} />
       ) : (
@@ -469,6 +507,36 @@ export function LineChart({
 
             <path d={area} fill={color} opacity="0.1" />
             <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+            {reference && (
+              <line
+                x1={PAD.left}
+                x2={W - PAD.right}
+                y1={y(reference.value)}
+                y2={y(reference.value)}
+                stroke="var(--viz-axis)"
+                strokeWidth="1.5"
+              />
+            )}
+
+            {/* The latest rate is the one that matters, so it is the only
+                point labelled directly. */}
+            <circle
+              cx={x(data.length - 1)}
+              cy={y(values[values.length - 1])}
+              r="4"
+              fill={color}
+              stroke="var(--viz-surface)"
+              strokeWidth="2"
+            />
+            <text
+              x={W - PAD.right}
+              y={y(values[values.length - 1]) - 10}
+              textAnchor="end"
+              className="fill-[var(--viz-ink)] text-[12px] font-semibold"
+            >
+              {format(values[values.length - 1])}
+            </text>
 
             {hover !== null && (
               <g>

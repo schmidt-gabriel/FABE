@@ -164,6 +164,26 @@ export default function Export() {
         </div>
       </Card>
 
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="font-semibold">Banco de dados</h2>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              PocketBase Admin: coleções, registros e configurações do servidor. Mesmo email e
+              senha desta conta.
+            </p>
+          </div>
+          <a
+            href="/_/"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+          >
+            Abrir PocketBase Admin ↗
+          </a>
+        </div>
+      </Card>
+
       {importOpen && <ImportModal onClose={() => setImportOpen(false)} />}
     </div>
   );

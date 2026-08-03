@@ -27,13 +27,16 @@ export default function ProfitDistributions() {
   const [irrfEdited, setIrrfEdited] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Reacts to the query string, not just to mounting: the sidebar "+" links
+  // here with ?new=1, and it has to open the form even when this page is
+  // already the one on screen.
   useEffect(() => {
     if (searchParams.get("new") === "1") {
       openNew();
       setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   // Suggested withholding for one record: the law taxes the month as a whole,
   // so we apply 10% over the other records of that month plus this amount, and

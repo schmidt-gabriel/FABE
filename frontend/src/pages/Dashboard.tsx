@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection } from "../lib/useCollection";
 import { useYear } from "../lib/year";
@@ -6,15 +5,23 @@ import type { Client, Expense, ImportRecord, ProfitDistribution, Remittance } fr
 import { expensePaid, IRRF_MONTHLY_LIMIT } from "../lib/types";
 import { pb, brl, usd, fmtDate } from "../lib/pb";
 import {
-  MonthSection,
-  QuickActions,
-  SectionToggle,
-  YearSection,
+  DistributionMeter,
+  ExpensesMeter,
+  InvoiceMeter,
+  LastImport,
+  Receivables,
+  UpcomingPayments,
+  useSelectedMonth,
+  YearSummary,
 } from "../components/OverviewSections";
 import { BarChart, ColumnChart, LineChart, type Datum } from "../components/charts";
 
-// Single landing page: the quick actions, the month block, the year block (both
-// from the old "Visão geral") and, below them, the year in charts.
+// Single landing page: the year strip on top (the only full-width block), then
+// one cell per subject, each pairing the month's card with the chart that tells
+// the same story (what is due with the quarterly DARF, invoices with monthly
+// revenue, ...). Cells are ordered by urgency, and every card and every chart
+// has the same size so the grid lines up. No section headers: the subtitle
+// names the period and each card repeats it.
 
 const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const INVOICE_LIMIT = 50000; // where the accounting fee tier jumps (same as the month card)
@@ -37,14 +44,7 @@ type Quarter = { quarter: number; irpj: number; irpj_adicional: number; csll: nu
 
 export default function Dashboard() {
   const { year } = useYear(); // global, selected in the sidebar
-  const [showCharts, setShowCharts] = useState(
-    () => localStorage.getItem("dashboard-charts") !== "0",
-  );
-  const toggleCharts = () =>
-    setShowCharts((v) => {
-      localStorage.setItem("dashboard-charts", v ? "0" : "1");
-      return !v;
-    });
+  const { name: monthName } = useSelectedMonth();
 
   const now = new Date();
   // Don't plot months that haven't happened yet in the current year.
@@ -66,6 +66,21 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("falha");
       return res.json();
     },
+  });
+
+  // Market quote, drawn as a rule across the effective-rate chart. Third-party
+  // data: a failure just drops the rule, the chart still stands.
+  const fx = useQuery<{ rate: number; date: string; stale?: boolean }>({
+    queryKey: ["fx-latest"],
+    queryFn: async () => {
+      const res = await fetch(`/api/fx/usd-brl`, {
+        headers: { Authorization: pb.authStore.token },
+      });
+      if (!res.ok) throw new Error("falha");
+      return res.json();
+    },
+    retry: 2,
+    staleTime: 5 * 60 * 1000,
   });
 
   const inYear = <T,>(rows: T[] | undefined, date: (r: T) => string) =>
@@ -90,7 +105,6 @@ export default function Dashboard() {
   const expensesByMonth = byMonth(yearExpenses, (r) => r.date, (r) => r.amount);
   const distByMonth = byMonth(yearDist, (r) => r.month, (r) => r.amount);
 
-  const faturamento: Datum[] = months.map((m, i) => ({ label: m, values: [invoicedByMonth[i]] }));
   const brutoVsDespesas: Datum[] = months.map((m, i) => ({
     label: m,
     values: [invoicedByMonth[i], expensesByMonth[i]],
@@ -165,70 +179,29 @@ export default function Dashboard() {
     : 0;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        {/* The sidebar selectors drive the page; naming the period here is
+            what replaced the old collapsible section headers. */}
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          {year} · mês de {monthName.toLowerCase()}
+        </p>
+      </div>
 
-      <QuickActions />
-      <MonthSection />
-      <YearSection />
+      <YearSummary />
 
-      <SectionToggle open={showCharts} onToggle={toggleCharts} label={`Gráficos de ${year}`} />
-
-      {showCharts && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {/* Most urgent first (what is due, what is still to be received), then
+          the month's limits, then context. Card on top, its chart below and
+          pinned to the bottom of the cell (mt-auto), so a taller card never
+          misaligns the row and no list needs to scroll. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="flex h-full flex-col gap-4">
+          <UpcomingPayments />
           <ColumnChart
-            title="Faturamento mensal (notas fiscais)"
-            subtitle={`Reais recebidos por mês de conversão · a linha marca ${brl(INVOICE_LIMIT)}, onde a mensalidade contábil sobe`}
-            data={faturamento}
-            series={[{ key: "brl", label: "Faturado", color: "var(--viz-s1)" }]}
-            format={brl}
-            tick={brlTick}
-            threshold={{ value: INVOICE_LIMIT, label: brlTick(INVOICE_LIMIT) }}
-          />
-
-          <ColumnChart
-            title="Faturamento × despesas"
-            subtitle="O espaço entre as colunas é o líquido do mês"
-            data={brutoVsDespesas}
-            series={[
-              { key: "bruto", label: "Faturado", color: "var(--viz-s1)" },
-              { key: "despesas", label: "Despesas", color: "var(--viz-s2)" },
-            ]}
-            format={brl}
-            tick={brlTick}
-          />
-
-          <ColumnChart
-            title="Recebido por cliente (USD)"
-            subtitle="Remessas por mês de pagamento, empilhadas por cliente"
-            data={received}
-            series={clientSeries}
-            format={usd}
-            tick={usdTick}
-            stacked
-          />
-
-          <BarChart
-            title="Despesas por categoria"
-            subtitle={`Pagas em ${year}, maiores primeiro`}
-            data={categories}
-            color="var(--viz-s2)"
-            format={brl}
-          />
-
-          <ColumnChart
-            title="Distribuição de lucros por mês"
-            subtitle={`Acima de ${brl(IRRF_MONTHLY_LIMIT)} no mês o IRRF de 10% incide sobre o total do mês`}
-            data={lucros}
-            series={[{ key: "dist", label: "Distribuído", color: "var(--viz-s3)" }]}
-            format={brl}
-            tick={brlTick}
-            threshold={{ value: IRRF_MONTHLY_LIMIT, label: brlTick(IRRF_MONTHLY_LIMIT) }}
-          />
-
-          <ColumnChart
+            className="mt-auto"
             title="Impostos por trimestre"
-            subtitle="Apuração do Lucro Presumido: IRPJ (com adicional) e CSLL do DARF"
+            subtitle="IRPJ (com adicional) e CSLL do DARF"
             data={quarters}
             series={[
               { key: "irpj", label: "IRPJ", color: "var(--viz-s1)" },
@@ -238,24 +211,84 @@ export default function Dashboard() {
             tick={brlTick}
             stacked
           />
-
-          <div className="xl:col-span-2">
-            <LineChart
-              title="Cotação efetiva das importações"
-              subtitle={
-                avgRate
-                  ? `BRL recebido ÷ USD enviado, taxas da plataforma incluídas · média ${avgRate.toFixed(4)}`
-                  : "BRL recebido ÷ USD enviado, taxas da plataforma incluídas"
-              }
-              data={effective}
-              color="var(--viz-s1)"
-              label="Cotação efetiva"
-              format={(v) => v.toFixed(4)}
-              tick={(v) => v.toFixed(2)}
-            />
-          </div>
         </div>
-      )}
+
+        <div className="flex h-full flex-col gap-4">
+          <Receivables />
+          <ColumnChart
+            className="mt-auto"
+            title="Recebido por cliente (USD)"
+            subtitle="Remessas por mês de pagamento"
+            data={received}
+            series={clientSeries}
+            format={usd}
+            tick={usdTick}
+            stacked
+          />
+        </div>
+
+        <div className="flex h-full flex-col gap-4">
+          <InvoiceMeter />
+          {/* Faturado e despesas no mesmo gráfico: a linha marca os R$50k das
+              notas fiscais e o espaço entre as colunas é o líquido do mês. */}
+          <ColumnChart
+            className="mt-auto"
+            title="Faturamento × despesas"
+            subtitle="Por mês · linha em R$50k (mensalidade contábil)"
+            data={brutoVsDespesas}
+            series={[
+              { key: "bruto", label: "Faturado", color: "var(--viz-s1)" },
+              { key: "despesas", label: "Despesas", color: "var(--viz-s2)" },
+            ]}
+            format={brl}
+            tick={brlTick}
+            threshold={{ value: INVOICE_LIMIT, label: brlTick(INVOICE_LIMIT) }}
+          />
+        </div>
+
+        <div className="flex h-full flex-col gap-4">
+          <DistributionMeter />
+          <ColumnChart
+            className="mt-auto"
+            title="Distribuição de lucros"
+            subtitle="Linha em R$50k: acima disso o IRRF de 10% incide sobre o mês inteiro"
+            data={lucros}
+            series={[{ key: "dist", label: "Distribuído", color: "var(--viz-s3)" }]}
+            format={brl}
+            tick={brlTick}
+            threshold={{ value: IRRF_MONTHLY_LIMIT, label: brlTick(IRRF_MONTHLY_LIMIT) }}
+          />
+        </div>
+
+        <div className="flex h-full flex-col gap-4">
+          <ExpensesMeter />
+          <BarChart
+            className="mt-auto"
+            title="Despesas por categoria"
+            subtitle="Maiores primeiro"
+            data={categories}
+            color="var(--viz-s2)"
+            format={brl}
+          />
+        </div>
+
+        <div className="flex h-full flex-col gap-4">
+          <LastImport />
+          <LineChart
+            className="mt-auto"
+            title="Cotação efetiva das importações"
+            subtitle={`BRL recebido ÷ USD enviado, com taxas${
+              avgRate ? ` · média ${avgRate.toFixed(4)}` : ""
+            }${fx.data?.rate ? ` · linha: mercado hoje ${fx.data.rate.toFixed(4)}` : ""}`}
+            data={effective}
+            color="var(--viz-s1)"
+            label="Cotação efetiva"
+            format={(v) => v.toFixed(4)}
+            tick={(v) => v.toFixed(2)}
+            reference={fx.data?.rate ? { value: fx.data.rate } : undefined}
+          />
+        </div>
+      </div>
     </div>
   );
 }

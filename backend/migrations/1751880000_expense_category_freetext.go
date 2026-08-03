@@ -16,7 +16,7 @@ import (
 // snapshot every value first and write it back afterwards to preserve data.
 
 var categoryEnum = []string{
-	"Unimed", "Internet", "Contabilizei", "GoWork",
+	"HealthInsurance", "Internet", "Contabilizei", "GoWork",
 	"DARF INSS", "DARF CSLL", "DARF IRPJ", "IMPOSTOS", "Outros",
 }
 

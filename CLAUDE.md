@@ -136,10 +136,13 @@ investir" applied to all of them, so the cards answer "which of these is better"
 and the "Cálculo rápido" on the Simulação page answers "R$ X a 102% do CDI em 24
 meses rende quanto" without cadastrar anything.
 
-Two pages: **Simulação** (`/pf`) and **Investimentos** (`/pf/investimentos`). Both
-render the same global inputs (CDI % a.a., valor, prazo 1..36 meses), persisted in
-the `settings_invest` singleton with a debounce (the prazo slider fires on every
-pixel). Results are always sorted best-to-worst by net gain.
+Two pages: **Simulação** (`/pf`) and **Investimentos** (`/pf/investimentos`). The
+inputs (CDI % a.a., valor, prazo 1..36 meses) are edited only on Simulação and
+persisted in the `settings_invest` singleton with a debounce (the prazo slider
+fires on every pixel); Investimentos reads them and states them as a subtitle, so
+every input field on that page lives inside its modal. Results are always sorted
+best-to-worst by **net gain in BRL**, and the "✓ Melhor" badge is just the top of
+that sort.
 
 **Simulação is read-only**: it creates and edits nothing, not even an empty-state
 "adicionar" (cadastro lives on Investimentos). It is split into one section per

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
-import { fromDateInput, toDateInput } from "../lib/pb";
+import { brl, fromDateInput, toDateInput } from "../lib/pb";
 import { simulate, type Investment } from "../lib/invest";
-import { NoInvestments, ResultCard, SimControls, useSimConfig } from "../components/invest";
+import { NoInvestments, ResultCard, useSimConfig } from "../components/invest";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = {
@@ -21,7 +21,9 @@ export default function Investments() {
     "investments_invest",
     { sort: "name" },
   );
-  const { cfg, setCfg } = useSimConfig();
+  // Read-only here: os parâmetros são editados na Simulação. Esta tela é só
+  // cadastro, e todo campo de entrada dela vive dentro do modal.
+  const { cfg } = useSimConfig();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Investment | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
@@ -72,12 +74,17 @@ export default function Investments() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Investimentos</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Investimentos</h1>
+          {/* De onde vêm os números dos cards, sem repetir os controles. */}
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            CDI {cfg.cdi.toLocaleString("pt-BR")}% · {brl(cfg.amount)} ·{" "}
+            {cfg.months} {cfg.months === 1 ? "mês" : "meses"}
+          </p>
+        </div>
         <Button onClick={openNew}>+ Adicionar</Button>
       </div>
-
-      <SimControls cfg={cfg} onChange={setCfg} />
 
       {results.length === 0 ? (
         <NoInvestments onAdd={openNew} />

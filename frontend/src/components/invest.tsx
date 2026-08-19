@@ -70,8 +70,7 @@ export function useSimConfig() {
   return { cfg: cfg ?? DEFAULT_CONFIG, setCfg, ready: cfg !== null };
 }
 
-// CDI, valor a investir e prazo. Compartilhados pelo card da Simulação e pela
-// tela de Investimentos, por isso vivem soltos aqui.
+// CDI, valor a investir e prazo, os parâmetros de uma classe de ativo.
 function ConfigFields({
   cfg,
   onChange,
@@ -111,23 +110,6 @@ function ConfigFields({
         />
       </Field>
     </>
-  );
-}
-
-/** Os parâmetros sozinhos, para a tela de Investimentos. */
-export function SimControls({
-  cfg,
-  onChange,
-}: {
-  cfg: SimConfig;
-  onChange: (c: SimConfig) => void;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <ConfigFields cfg={cfg} onChange={onChange} />
-      </div>
-    </Card>
   );
 }
 

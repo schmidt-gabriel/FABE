@@ -81,12 +81,11 @@ export const expenseMatchesService = (e: Expense, service: string) => {
 export interface ProfitDistribution extends BaseRecord {
   month: string;
   amount: number;
-  // IRRF alta renda actually withheld on this record, in BRL (DARF cód. 1841).
-  // This is the source of truth for every "IRRF retido" total in the UI: the
-  // form pre-fills it with the computed 10% of the month, but it can be
-  // overridden with what the DARF really came out to (rounding, correction,
-  // profits accrued through 2025 that stay exempt). Summing the records of a
-  // month gives the month's withholding.
+  // IRRF alta renda on this record, in BRL (DARF cód. 1841). Derived, never
+  // typed: the law taxes the month as a whole, so the form computes 10% of the
+  // month's total and stores each record's share of it, and saving or deleting
+  // one record rewrites the share of the others in that month. Summing the
+  // records of a month gives the month's withholding.
   irrf?: number;
   notes?: string;
 }

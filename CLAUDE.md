@@ -205,14 +205,16 @@ through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
   R$50k/month to the same PF is taxed 10% on the **full month's amount** (DARF cód. 1841).
   Refundable in the annual IRPF if total yearly income stays below R$600k. Profits
   accrued through 2025 are exempt. Only applies to years >= 2026.
-  `profit_distributions.irrf` stores the IRRF **actually withheld** on that record
-  (BRL) and is the **source of truth** for every "IRRF retido" total in the UI, so the
-  real DARF can be recorded when it differs from the rule (rounding, correction,
-  pre-2026 profits that stay exempt). The form pre-fills it with the computed 10% and
-  the user may override; where the stored value diverges from the rule, the UI shows
-  the expected one beside it instead of silently recomputing. The threshold and the
-  10% apply to the **month as a whole**, so a month split across records is judged by
-  its sum and each record carries its share. The old `cota_irrf` field (remaining
+  `profit_distributions.irrf` is **derived, never typed**: the threshold and the 10%
+  apply to the **month as a whole**, so the form computes 10% of the month's total and
+  stores each record's share of it. Because the withholding belongs to the month and
+  not to the record, saving or deleting one record **rewrites the share of every other
+  record in that month** (`syncMonth` in `ProfitDistributions.tsx`), and moving a
+  record between months rebalances both. It is still the stored value that every
+  "IRRF retido" total in the UI reads; where an old stored value diverges from the
+  rule, the row shows the expected one beside it instead of silently recomputing.
+  Trade-off taken on purpose: a real DARF that differs from the rule (rounding, a
+  correction, pre-2026 profits that stay exempt) can no longer be recorded by hand. The old `cota_irrf` field (remaining
   tax-free quota, never read) was dropped by
   `migrations/1751900000_profit_distribution_irrf.go`, which backfills `irrf`; the
   remaining quota is now derived for display only. Reimporting a **pre-migration**

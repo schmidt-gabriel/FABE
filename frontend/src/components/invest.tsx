@@ -169,8 +169,8 @@ export function RendaFixaCard({
 
       {bothTyped && (
         <div className="mt-4 border-t border-neutral-100 pt-3 text-sm font-medium dark:border-neutral-800">
-          {winner} rende {brl(diff)} a mais. CDB {cdbPct}% empata com LCI{" "}
-          {pct(breakEven)}%.
+          {winner} rende {brl(diff)} a mais. CDB{" "}
+          {Number(cdbPct).toLocaleString("pt-BR")}% empata com LCI {pct(breakEven)}%.
         </div>
       )}
     </Card>

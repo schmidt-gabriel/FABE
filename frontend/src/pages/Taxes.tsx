@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pb, brl, fmtDate } from "../lib/pb";
 import { MONTHS, useYear } from "../lib/year";
 import { useCollection } from "../lib/useCollection";
-import { IRRF_START_YEAR, type ProfitDistribution } from "../lib/types";
+import { IRRF_START_YEAR, irrfDueDate, type ProfitDistribution } from "../lib/types";
 import { Button, Card } from "../components/ui";
 
 type Quarter = {
@@ -35,19 +35,19 @@ async function authFetch(path: string, init?: RequestInit) {
   return res.json();
 }
 
+type IrrfMonth = { ym: string; amount: number; irrf: number; due: string };
+
 /**
- * IRRF alta renda, mês a mês. O valor vem dos registros de Distribuição de
- * Lucros (onde é derivado da regra), não é recalculado aqui: um número, um
- * dono. Esta tela só o traz para onde os DARFs são lidos.
+ * IRRF alta renda do ano, uma linha por mês: é assim que a retenção é cobrada
+ * e paga. Os valores vêm dos registros de Distribuição de Lucros (onde são
+ * derivados da regra) e nunca são recalculados aqui: um número, um dono.
  */
-function IrrfSection({ year }: { year: number }) {
+function useIrrfByMonth(year: number): IrrfMonth[] {
   const { list } = useCollection<ProfitDistribution>("profit_distributions", {
     sort: "-month",
   });
+  if (year < IRRF_START_YEAR) return [];
 
-  if (year < IRRF_START_YEAR) return null;
-
-  // Um mês por linha: a retenção é do mês inteiro, então é assim que ela é paga.
   const byMonth = new Map<string, { amount: number; irrf: number }>();
   for (const d of list.data ?? []) {
     if (d.month.slice(0, 4) !== String(year)) continue;
@@ -55,10 +55,14 @@ function IrrfSection({ year }: { year: number }) {
     const acc = byMonth.get(ym) ?? { amount: 0, irrf: 0 };
     byMonth.set(ym, { amount: acc.amount + d.amount, irrf: acc.irrf + (d.irrf ?? 0) });
   }
-  const rows = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  if (rows.length === 0) return null;
+  return [...byMonth.entries()]
+    .map(([ym, v]) => ({ ym, ...v, due: irrfDueDate(ym) }))
+    .sort((a, b) => b.ym.localeCompare(a.ym));
+}
 
-  const total = rows.reduce((sum, [, v]) => sum + v.irrf, 0);
+function IrrfSection({ rows }: { rows: IrrfMonth[] }) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((sum, r) => sum + r.irrf, 0);
 
   return (
     <>
@@ -68,32 +72,36 @@ function IrrfSection({ year }: { year: number }) {
           <thead className="bg-neutral-50 text-neutral-500 dark:bg-neutral-800/50 dark:text-neutral-400">
             <tr>
               <th className="px-4 py-3 text-left">Mês</th>
+              <th className="px-4 py-3 text-left">Vencimento</th>
               <th className="px-4 py-3 text-right">Distribuído</th>
               <th className="px-4 py-3 text-right">IRRF (cód. 1841)</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(([ym, v]) => (
-              <tr key={ym} className="border-t border-neutral-100 dark:border-neutral-800">
+            {rows.map((r) => (
+              <tr key={r.ym} className="border-t border-neutral-100 dark:border-neutral-800">
                 <td className="px-4 py-3 font-medium">
-                  {MONTHS[Number(ym.slice(5, 7)) - 1]}
+                  {MONTHS[Number(r.ym.slice(5, 7)) - 1]}
                 </td>
-                <td className="px-4 py-3 text-right">{brl(v.amount)}</td>
+                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                  {r.irrf > 0 ? fmtDate(r.due) : "—"}
+                </td>
+                <td className="px-4 py-3 text-right">{brl(r.amount)}</td>
                 <td
                   className={`px-4 py-3 text-right ${
-                    v.irrf > 0
+                    r.irrf > 0
                       ? "font-medium text-amber-600 dark:text-amber-400"
                       : "text-neutral-500 dark:text-neutral-400"
                   }`}
                 >
-                  {brl(v.irrf)}
+                  {brl(r.irrf)}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot className="bg-neutral-50 font-semibold dark:bg-neutral-800/50">
             <tr className="border-t border-neutral-200 dark:border-neutral-700">
-              <td className="px-4 py-3" colSpan={2}>
+              <td className="px-4 py-3" colSpan={3}>
                 Total do ano
               </td>
               <td className="px-4 py-3 text-right">{brl(total)}</td>
@@ -102,8 +110,9 @@ function IrrfSection({ year }: { year: number }) {
         </table>
       </Card>
       <p className="text-xs text-neutral-400 dark:text-neutral-500">
-        Retido na distribuição, 10% sobre o mês que passa de R$50k. O valor é o
-        guardado em Distribuição de Lucros, onde é calculado pela regra.
+        Retido na distribuição, 10% sobre o mês que passa de R$50k, recolhido até o
+        último dia útil do mês seguinte. O valor é o guardado em Distribuição de
+        Lucros, onde é calculado pela regra.
       </p>
     </>
   );
@@ -127,17 +136,28 @@ export default function Taxes() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tax", year] }),
   });
 
-  // Next payment = nearest upcoming quarterly DARF still in forecast. One-off
-  // taxes (TFE, IPTU, ...) are plain expenses now, tracked in Despesas.
+  const irrfRows = useIrrfByMonth(year);
+
+  // Next payment = nearest upcoming DARF still due, quarterly IRPJ/CSLL or the
+  // monthly IRRF on distributed profits. One-off taxes (TFE, IPTU, ...) are
+  // plain expenses now, tracked in Despesas.
   const next = (() => {
-    const obligations = (data?.quarters ?? [])
-      .filter((q) => q.status === "forecast" && q.total > 0)
-      .map((q) => ({
-        label: `Imposto T${q.quarter} (${QUARTER_MONTHS[q.quarter - 1]})`,
-        due: q.due_date,
-        amount: q.total,
-      }))
-      .sort((a, b) => a.due.localeCompare(b.due));
+    const obligations = [
+      ...(data?.quarters ?? [])
+        .filter((q) => q.status === "forecast" && q.total > 0)
+        .map((q) => ({
+          label: `Imposto T${q.quarter} (${QUARTER_MONTHS[q.quarter - 1]})`,
+          due: q.due_date,
+          amount: q.total,
+        })),
+      ...irrfRows
+        .filter((r) => r.irrf > 0)
+        .map((r) => ({
+          label: `IRRF · ${MONTHS[Number(r.ym.slice(5, 7)) - 1]}`,
+          due: r.due,
+          amount: r.irrf,
+        })),
+    ].sort((a, b) => a.due.localeCompare(b.due));
     return obligations.find((o) => o.due >= today()) ?? obligations[0];
   })();
 
@@ -239,7 +259,7 @@ export default function Taxes() {
         Trimestres em aberto mostram a previsão ao vivo. Use “Destravar” para corrigir.
       </p>
 
-      <IrrfSection year={year} />
+      <IrrfSection rows={irrfRows} />
     </div>
   );
 }

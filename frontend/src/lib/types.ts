@@ -96,10 +96,28 @@ export const IRRF_MONTHLY_LIMIT = 50000;
 export const IRRF_RATE = 0.1;
 export const IRRF_START_YEAR = 2026;
 
-// What the law charges on a month's total. Used to pre-fill `irrf` on new
-// records and to flag stored values that diverge from it.
+// What the law charges on a month's total. Every stored `irrf` is a share of
+// this, and it is what flags a stored value that diverges from the rule.
 export const suggestedIrrf = (monthTotal: number, year: number) =>
   year >= IRRF_START_YEAR && monthTotal > IRRF_MONTHLY_LIMIT ? monthTotal * IRRF_RATE : 0;
+
+/**
+ * Vencimento do DARF de IRRF (cód. 1841): o último dia útil do mês seguinte ao
+ * da distribuição. Pula só fim de semana, feriado não entra, que é o mesmo
+ * critério do vencimento trimestral em `backend/internal/api/tax_periods.go`:
+ * ensinar feriados a um pede ensinar ao outro.
+ *
+ * `ym` é "YYYY-MM"; devolve "YYYY-MM-DD".
+ */
+export function irrfDueDate(ym: string): string {
+  const year = Number(ym.slice(0, 4));
+  const month = Number(ym.slice(5, 7)); // 1..12
+  // Dia 0 de um mês é o último dia do mês anterior.
+  const due = new Date(year, month + 1, 0);
+  while (due.getDay() === 0 || due.getDay() === 6) due.setDate(due.getDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}`;
+}
 
 export interface RecurringService extends BaseRecord {
   name: string;

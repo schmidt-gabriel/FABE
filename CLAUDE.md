@@ -202,7 +202,8 @@ through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
   (T1→30/04, T2→31/07, T3→31/10, T4→31/01). Quarters auto-lock on their due date
   (snapshot frozen); "Destravar" reopens for correction. No manual pre-locking.
 - **IRRF alta renda (Lei 15.270/2025, from 2026 on):** profit distribution above
-  R$50k/month to the same PF is taxed 10% on the **full month's amount** (DARF cód. 1841).
+  R$50k/month to the same PF is taxed 10% on the **full month's amount** (DARF cód.
+  1841), recolhido até o último dia útil do mês seguinte.
   Refundable in the annual IRPF if total yearly income stays below R$600k. Profits
   accrued through 2025 are exempt. Only applies to years >= 2026.
   `profit_distributions.irrf` is **derived, never typed**: the threshold and the 10%
@@ -265,8 +266,12 @@ through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
   assessment, the Impostos page carries an **"IRRF sobre lucros"** table, one row per
   month (that is how the withholding is charged and paid). It only **reads** the
   `irrf` stored on the distributions, never recomputes it: one number, one owner.
-  It carries no due date, because the recolhimento deadline for DARF 1841 is not
-  something to guess from memory; add it as a constant once the real DARF confirms it.
+  Its **vencimento is the last business day of the month after the distribution**
+  (`irrfDueDate` in `lib/types.ts`), the same rule as the quarterly DARF, and it
+  shares the same caveat: weekends are stepped over, holidays are not considered.
+  Teaching holidays to one asks for teaching them to the other (the quarterly one
+  lives in Go, `dueDate` in `api/tax_periods.go`). The "Próximo pagamento" card
+  weighs both DARFs, so an IRRF falling before the next quarter is what it shows.
 
 ## Conventions
 

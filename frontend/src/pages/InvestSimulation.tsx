@@ -4,11 +4,10 @@ import { horizon, simulate, type Investment } from "../lib/invest";
 import { QuickCalc, ResultCard, SimControls, useSimConfig } from "../components/invest";
 import { BarChart } from "../components/charts";
 
-// Simulação: só de leitura. Os três parâmetros globais valem para a tela
-// toda; abaixo deles vem uma seção por classe de ativo, hoje só "Renda fixa"
-// (cálculo rápido de uma taxa qualquer + comparação dos títulos cadastrados,
-// do melhor para o pior). Cadastrar é assunto da tela de Investimentos: aqui
-// nada é criado nem editado.
+// Simulação: só de leitura, dividida em uma seção por classe de ativo (hoje
+// só "Renda fixa": os parâmetros, o cálculo rápido de uma taxa qualquer e a
+// comparação dos títulos cadastrados, do melhor para o pior). Cadastrar é
+// assunto da tela de Investimentos: aqui nada é criado nem editado.
 export default function InvestSimulation() {
   const { cfg, setCfg } = useSimConfig();
   const { list } = useCollection<Investment>("investments_invest", { sort: "name" });
@@ -27,10 +26,11 @@ export default function InvestSimulation() {
         </p>
       </div>
 
+      {/* Uma seção por classe de ativo: as próximas entram como irmãs desta,
+          cada uma com os seus próprios parâmetros. Nada fica solto fora de
+          uma seção. */}
+      <h2 className="text-lg font-semibold">Renda fixa</h2>
       <SimControls cfg={cfg} onChange={setCfg} />
-
-      {/* Uma seção por classe de ativo: as próximas entram como irmãs desta. */}
-      <h2 className="pt-2 text-lg font-semibold">Renda fixa</h2>
       <QuickCalc cfg={cfg} />
 
       {results.length > 0 && (

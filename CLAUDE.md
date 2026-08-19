@@ -142,9 +142,11 @@ the `settings_invest` singleton with a debounce (the prazo slider fires on every
 pixel). Results are always sorted best-to-worst by net gain.
 
 **Simulação is read-only**: it creates and edits nothing, not even an empty-state
-"adicionar" (cadastro lives on Investimentos). Under the global inputs it is split
-into one section per asset class, today only **"Renda fixa"**; other classes will
-come in as siblings of that heading, which is why the two pages stay separate.
+"adicionar" (cadastro lives on Investimentos). It is split into one section per
+asset class, today only **"Renda fixa"**, and nothing sits outside a section: the
+inputs card belongs to its class, since the next classes will bring their own.
+Other classes come in as siblings of that heading, which is why the two pages stay
+separate.
 
 The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
 the browser rather than in Go because every slider move recomputes it. Rules:

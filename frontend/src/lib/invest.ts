@@ -10,7 +10,7 @@
 import type { BaseRecord } from "./types";
 
 export type InvestKind = "cdb" | "lci_lca";
-export type Liquidity = "daily" | "maturity";
+export type Liquidity = "daily" | "maturity" | "market";
 
 export interface Investment extends BaseRecord {
   name: string;
@@ -44,7 +44,7 @@ export const MAX_MONTHS = 36;
 
 export const kindLabel = (k: InvestKind) => (k === "cdb" ? "CDB" : "LCI/LCA");
 export const liquidityLabel = (l?: Liquidity) =>
-  l === "maturity" ? "No vencimento" : "Diária";
+  l === "maturity" ? "No vencimento" : l === "market" ? "Mercado" : "Diária";
 
 const fromPct = (v: number) => v / 100;
 

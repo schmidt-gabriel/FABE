@@ -107,7 +107,7 @@ scheduled, paid, payment_type auto|manual),
 
 Pessoa Física (suffix `_invest`, see **Modalidades** below):
 `investments_invest` (name, broker, kind cdb|lci_lca, cdi_pct, amount, applied_at,
-liquidity daily|maturity, maturity), `settings_invest` (singleton: cdi_rate, amount,
+liquidity daily|maturity|market, maturity), `settings_invest` (singleton: cdi_rate, amount,
 months). Note the two `amount`s are different things: on a position it is what was
 really applied, on the settings it is the simulation's hypothetical "valor a investir".
 
@@ -139,8 +139,9 @@ Two pages, and the split between them is the point:
   asset class (today only **"Renda fixa"**, `RendaFixaCard`): the parameters (CDI %
   a.a., valor a investir, prazo 1..36 meses) on top, a hairline, then the two
   options side by side with the same valor and prazo and only the taxas differing,
-  the winner badged. The closing line carries the verdict plus **the taxa isenta
-  that ties with the CDB** (`equivalentTaxFreePct`), which is the number that
+  and nothing is prefilled (an example rate there reads as a result, so a column
+  shows no numbers until its taxa is typed). The closing line carries the verdict
+  plus **the taxa isenta that ties with the CDB** (`equivalentTaxFreePct`), which is the number that
   actually decides: an LCI above it wins, below it loses. Nothing sits outside a
   section, parameters included, since the next classes bring their own.
 - **Investimentos** (`/pf/investimentos`) is the **real carteira**: the titles
@@ -154,9 +155,9 @@ Two pages, and the split between them is the point:
 The parameters are persisted in the `settings_invest` singleton with a debounce
 (the prazo slider fires on every pixel).
 
-Investimentos sorts by **% líquido do CDI** and badges the top one "✓ Melhor":
-real positions have different sizes, so ordering by reais would just crown the
-biggest application. That ratio is deliberately **not** shown on Simulação beside
+Investimentos sorts by **% líquido do CDI**: real positions have different sizes,
+so ordering by reais would just crown the biggest application. The order is the
+whole statement, there is no "melhor" badge on a card. That ratio is deliberately **not** shown on Simulação beside
 the tie-rate: the two measure different things (share of the CDI's gain vs the
 equivalent compounding rate) and reading them side by side only confuses.
 

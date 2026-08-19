@@ -128,8 +128,9 @@ export function RendaFixaCard({
   cfg: SimConfig;
   onChange: (c: SimConfig) => void;
 }) {
-  const [cdbPct, setCdbPct] = useState("102");
-  const [lciPct, setLciPct] = useState("92");
+  // Vazios de propósito: um valor de exemplo aqui se lê como resultado.
+  const [cdbPct, setCdbPct] = useState("");
+  const [lciPct, setLciPct] = useState("");
 
   const days = horizon(cfg.months).calendarDays;
   const cdb = yieldOf(cfg.amount, cfg.cdi, Number(cdbPct) || 0, "cdb", days);
@@ -143,6 +144,7 @@ export function RendaFixaCard({
   );
   const diff = Math.abs(cdb.netGain - lci.netGain);
   const winner = cdb.netGain >= lci.netGain ? "CDB" : "LCI/LCA";
+  const bothTyped = cdbPct !== "" && lciPct !== "";
 
   return (
     <Card className="p-4">
@@ -159,24 +161,18 @@ export function RendaFixaCard({
           pct={cdbPct}
           onPct={setCdbPct}
           result={cdb}
-          best={winner === "CDB"}
         />
         <div className="sm:border-l sm:border-neutral-100 sm:pl-6 sm:dark:border-neutral-800">
-          <Option
-            label="LCI/LCA"
-            note="Isento"
-            pct={lciPct}
-            onPct={setLciPct}
-            result={lci}
-            best={winner === "LCI/LCA"}
-          />
+          <Option label="LCI/LCA" note="Isento" pct={lciPct} onPct={setLciPct} result={lci} />
         </div>
       </div>
 
-      <div className="mt-4 border-t border-neutral-100 pt-3 text-sm font-medium dark:border-neutral-800">
-        {winner} rende {brl(diff)} a mais. CDB {cdbPct}% empata com LCI{" "}
-        {pct(breakEven)}%.
-      </div>
+      {bothTyped && (
+        <div className="mt-4 border-t border-neutral-100 pt-3 text-sm font-medium dark:border-neutral-800">
+          {winner} rende {brl(diff)} a mais. CDB {cdbPct}% empata com LCI{" "}
+          {pct(breakEven)}%.
+        </div>
+      )}
     </Card>
   );
 }
@@ -185,40 +181,43 @@ export function RendaFixaCard({
 function Option({
   label,
   note,
-  pct,
+  pct: cdiPct,
   onPct,
   result,
-  best,
 }: {
   label: string;
   note: string;
   pct: string;
   onPct: (v: string) => void;
   result: Yield;
-  best: boolean;
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{label}</span>
-        {best && <Badge tone="win">✓ Melhor</Badge>}
-      </div>
+      <p className="mb-2 text-sm font-semibold">{label}</p>
       <Field label="Taxa (% do CDI)">
         <Input
           type="number"
-          step="0.1"
+          step="0.01"
           min={0}
-          value={pct}
+          value={cdiPct}
           onChange={(e) => onPct(e.target.value)}
         />
       </Field>
-      <p className="mt-3 text-2xl font-semibold tabular-nums">{brl(result.net)}</p>
-      <p className="mt-0.5 text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
-        + {brl(result.netGain)} líquido
-      </p>
-      <p className="mt-0.5 text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-        {note}
-      </p>
+      {cdiPct === "" ? (
+        <p className="mt-3 text-sm text-neutral-400 dark:text-neutral-500">
+          Informe a taxa.
+        </p>
+      ) : (
+        <>
+          <p className="mt-3 text-2xl font-semibold tabular-nums">{brl(result.net)}</p>
+          <p className="mt-0.5 text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
+            + {brl(result.netGain)} líquido
+          </p>
+          <p className="mt-0.5 text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+            {note}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -250,29 +249,20 @@ function Badge({
  */
 export function PositionCard({
   position: p,
-  best = false,
   actions,
 }: {
   position: Position;
-  best?: boolean;
   actions?: React.ReactNode;
 }) {
   const inv = p.investment;
   return (
-    <Card
-      className={`flex flex-col p-4 ${
-        best ? "ring-2 ring-emerald-500 dark:ring-emerald-500" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-semibold leading-tight">{inv.name}</h3>
-          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-            {inv.broker ? `${inv.broker} · ` : ""}
-            {kindLabel(inv.kind)} · {inv.cdi_pct}% do CDI
-          </p>
-        </div>
-        {best && <Badge tone="win">✓ Melhor</Badge>}
+    <Card className="flex flex-col p-4">
+      <div>
+        <h3 className="font-semibold leading-tight">{inv.name}</h3>
+        <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+          {inv.broker ? `${inv.broker} · ` : ""}
+          {kindLabel(inv.kind)} · {inv.cdi_pct}% do CDI
+        </p>
       </div>
 
       <div className="mt-4 space-y-1">

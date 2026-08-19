@@ -109,11 +109,10 @@ export default function Investments() {
         <NoInvestments onAdd={openNew} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {carteira.map((p, i) => (
+          {carteira.map((p) => (
             <PositionCard
               key={p.investment.id}
               position={p}
-              best={i === 0}
               actions={
                 <>
                   <Button variant="ghost" onClick={() => openEdit(p.investment)}>
@@ -138,7 +137,7 @@ export default function Investments() {
             <Field label="Nome">
               <Input
                 required
-                placeholder="LCI Pine"
+                placeholder="Nome"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
@@ -168,7 +167,7 @@ export default function Investments() {
             <Field label="Taxa (% do CDI)">
               <Input
                 type="number"
-                step="0.1"
+                step="0.01"
                 min={0}
                 required
                 value={form.cdi_pct}
@@ -200,6 +199,7 @@ export default function Investments() {
               >
                 <option value="maturity">No vencimento</option>
                 <option value="daily">Diária</option>
+                <option value="market">Mercado</option>
               </Select>
             </Field>
             <Field label="Vencimento">

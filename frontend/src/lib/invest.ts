@@ -29,6 +29,7 @@ export interface Investment extends BaseRecord {
   notes?: string;
 }
 
+/** Os parâmetros da simulação: hipotéticos, nada aqui vem da carteira real. */
 export interface SimConfig {
   /** CDI atual, % a.a. */
   cdi: number;
@@ -119,6 +120,23 @@ export const dailyCdi = (cdiAnnualPct: number) =>
 export const growthFactor = (cdiAnnualPct: number, cdiPct: number, businessDays: number) =>
   Math.pow(1 + dailyCdi(cdiAnnualPct) * fromPct(cdiPct), businessDays);
 
+/**
+ * A taxa isenta que empata com um rendimento líquido: quanto uma LCI/LCA
+ * precisa pagar, em % do CDI, para render o mesmo que este valor líquido.
+ * É o número que decide entre um CDB e uma LCI.
+ */
+export function equivalentTaxFreePct(
+  netGain: number,
+  amount: number,
+  cdiAnnualPct: number,
+  businessDays: number,
+): number {
+  const daily = dailyCdi(cdiAnnualPct);
+  if (amount <= 0 || businessDays <= 0 || daily <= 0) return 0;
+  const factor = 1 + netGain / amount;
+  return ((Math.pow(factor, 1 / businessDays) - 1) / daily) * 100;
+}
+
 /** Dias úteis equivalentes a um número de dias corridos. */
 export const businessDaysIn = (calendarDays: number) =>
   Math.max(
@@ -163,31 +181,6 @@ export function yieldOf(
     netGain,
     netCdiPct: cdi100Gain > 0 ? (netGain / cdi100Gain) * 100 : 0,
   };
-}
-
-export interface SimResult extends Yield {
-  investment: Investment;
-  /** Vence antes do fim da simulação: assume reinvestimento à mesma taxa. */
-  maturesEarly: boolean;
-  /** Sem liquidez diária e vencendo depois do prazo: não dá para resgatar. */
-  lockedPastHorizon: boolean;
-}
-
-export function simulateOne(inv: Investment, cfg: SimConfig, h: Horizon): SimResult {
-  const y = yieldOf(cfg.amount, cfg.cdi, inv.cdi_pct, inv.kind, h.calendarDays);
-  const maturity = maturityOf(inv);
-  return {
-    investment: inv,
-    ...y,
-    maturesEarly: !!maturity && maturity < h.end,
-    lockedPastHorizon: inv.liquidity === "maturity" && !!maturity && maturity > h.end,
-  };
-}
-
-/** Simula a carteira toda e ordena do melhor para o pior ganho líquido. */
-export function simulate(list: Investment[], cfg: SimConfig): SimResult[] {
-  const h = horizon(cfg.months);
-  return list.map((inv) => simulateOne(inv, cfg, h)).sort((a, b) => b.netGain - a.netGain);
 }
 
 // ---------------------------------------------------------------------------

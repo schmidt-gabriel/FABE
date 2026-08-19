@@ -133,17 +133,16 @@ the sidebar hides those selectors there.
 
 Two pages, and the split between them is the point:
 
-- **Simulação** (`/pf`) is **hypothetical and read-only**: no real data (that is
-  what the broker's app is for), and it creates or edits nothing, not even an
-  empty-state "adicionar". It is split into one section per asset class, today
-  only **"Renda fixa"**, and each class is **one card** (`RendaFixaCard`): its
-  parameters (CDI % a.a., valor a investir, prazo 1..36 meses) on top, a hairline,
-  then a taxa typed on the spot with its result flush right. That answers "R$ X a
-  102% do CDI em 24 meses rende quanto" without registering anything. Nothing sits
-  outside a section, parameters included, since the next classes bring their own.
-  Below it, the registered titles are compared under that same hypothetical amount
-  and prazo (verdict sentence, cards, bar chart of net gains), which is a fair
-  rate-vs-rate comparison precisely because the amount is the same for all.
+- **Simulação** (`/pf`) is **hypothetical and read-only**: no real data at all (not
+  even the registered carteira, which would only muddy it), nothing created or
+  edited. The question it answers is **"CDB ou LCI?"**, so it is a single card per
+  asset class (today only **"Renda fixa"**, `RendaFixaCard`): the parameters (CDI %
+  a.a., valor a investir, prazo 1..36 meses) on top, a hairline, then the two
+  options side by side with the same valor and prazo and only the taxas differing,
+  the winner badged. The closing line carries the verdict plus **the taxa isenta
+  that ties with the CDB** (`equivalentTaxFreePct`), which is the number that
+  actually decides: an LCI above it wins, below it loses. Nothing sits outside a
+  section, parameters included, since the next classes bring their own.
 - **Investimentos** (`/pf/investimentos`) is the **real carteira**: the titles
   actually bought. Each record carries `amount` (valor aplicado), `applied_at` and
   `broker` ("XP"), so the card answers **"quanto tenho hoje"**: the net value of a
@@ -155,10 +154,11 @@ Two pages, and the split between them is the point:
 The parameters are persisted in the `settings_invest` singleton with a debounce
 (the prazo slider fires on every pixel).
 
-Ordering differs per page, on purpose. Simulação sorts by **net gain in BRL** (same
-amount for everyone, so reais are comparable); Investimentos sorts by **% líquido
-do CDI**, because real positions have different sizes and reais would just crown
-the biggest application. The "✓ Melhor" badge is the top of whichever sort applies.
+Investimentos sorts by **% líquido do CDI** and badges the top one "✓ Melhor":
+real positions have different sizes, so ordering by reais would just crown the
+biggest application. That ratio is deliberately **not** shown on Simulação beside
+the tie-rate: the two measure different things (share of the CDI's gain vs the
+equivalent compounding rate) and reading them side by side only confuses.
 
 The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
 the browser rather than in Go because every slider move recomputes it. `yieldOf` is
@@ -174,16 +174,19 @@ gross/net/IR breakdown out. Rules:
 - **IR regressivo** por **dias corridos**, sobre o rendimento: 22,5% até 180, 20%
   até 360, 17,5% até 720, 15% acima. Só para **CDB**; **LCI/LCA são isentas**.
 - **% líquido do CDI** = ganho líquido ÷ ganho de um título a 100% do CDI no mesmo
-  prazo. É o número que compara isento com tributado.
+  prazo. Serve para ranquear posições de tamanhos diferentes na carteira.
+- **Taxa isenta equivalente** = a taxa, em % do CDI, que rende sozinha o mesmo que
+  um líquido já tributado: `((1 + ganho/valor)^(1/dias_úteis) - 1) / taxa_diária`.
+  É o que decide CDB contra LCI.
 - **Um título vencido para de render:** a contagem de dias trava no vencimento, e o
   card ganha o badge "Vencido".
-- **Avisos** (badges, nunca parágrafos): na Simulação, vencimento antes do fim do
-  prazo simulado marca "vence antes: reinveste à mesma taxa", e liquidez só no
-  vencimento com vencimento depois do prazo marca "sem resgate no prazo".
+- **Avisos** (badges, nunca parágrafos): na carteira, um título já vencido marca
+  "Vencido" e um sem data de aplicação marca "Sem data de aplicação".
 
 UI text on the PF side is deliberately terse: labels of at most 5 words, one badge
-per fact, a single verdict sentence ("X rende R$ N a mais que o 2º lugar em M
-meses"). No tooltips, no educational paragraphs.
+per fact, a single verdict sentence ("LCI/LCA rende R$ 364,01 a mais. CDB 102%
+empata com LCI 88,3%."). No tooltips, no educational paragraphs. Percentages go
+through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
 
 ## Domain rules (important)
 

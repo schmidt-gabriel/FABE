@@ -9,6 +9,10 @@ export const pb = new PocketBase("/");
 export const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// Percentual com uma casa, em pt-BR: 88.3 -> "88,3".
+export const pct = (v: number) =>
+  v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 export const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 

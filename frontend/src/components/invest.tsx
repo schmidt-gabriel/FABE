@@ -7,14 +7,14 @@ import {
   horizon,
   kindLabel,
   liquidityLabel,
-  simulateOne,
-  type InvestKind,
+  equivalentTaxFreePct,
+  yieldOf,
   type Position,
   type SimConfig,
-  type SimResult,
+  type Yield,
 } from "../lib/invest";
-import { fmtDate } from "../lib/pb";
-import { Button, Card, Field, Input, Select } from "./ui";
+import { fmtDate, pct } from "../lib/pb";
+import { Button, Card, Field, Input } from "./ui";
 
 // Shared pieces of the Pessoa Física module: the global simulation inputs
 // (persisted in the `settings_invest` singleton, so both PF pages read the same
@@ -116,10 +116,10 @@ function ConfigFields({
 }
 
 /**
- * A seção Renda fixa da Simulação, em um card só: os parâmetros em cima e,
- * abaixo da linha, uma taxa digitada na hora com o resultado ao lado. Responde
- * direto "valor X a 102% do CDI em 2 anos rende quanto" sem cadastrar nada; a
- * lista cadastrada, quando existe, aparece embaixo só para comparar.
+ * A seção Renda fixa da Simulação, em um card só. A pergunta que ela responde
+ * é "CDB ou LCI?", então os dois aparecem lado a lado com o mesmo valor e o
+ * mesmo prazo: só as taxas mudam. Embaixo, o veredito e a taxa isenta que
+ * empata com o CDB, que é o número que decide.
  */
 export function RendaFixaCard({
   cfg,
@@ -128,14 +128,21 @@ export function RendaFixaCard({
   cfg: SimConfig;
   onChange: (c: SimConfig) => void;
 }) {
-  const [cdiPct, setCdiPct] = useState("102");
-  const [kind, setKind] = useState<InvestKind>("cdb");
+  const [cdbPct, setCdbPct] = useState("102");
+  const [lciPct, setLciPct] = useState("92");
 
-  const r = simulateOne(
-    { id: "quick", name: "", kind, cdi_pct: Number(cdiPct) || 0, liquidity: "daily" },
-    cfg,
-    horizon(cfg.months),
+  const days = horizon(cfg.months).calendarDays;
+  const cdb = yieldOf(cfg.amount, cfg.cdi, Number(cdbPct) || 0, "cdb", days);
+  const lci = yieldOf(cfg.amount, cfg.cdi, Number(lciPct) || 0, "lci_lca", days);
+  // A LCI precisa desta taxa para empatar com o CDB digitado.
+  const breakEven = equivalentTaxFreePct(
+    cdb.netGain,
+    cfg.amount,
+    cfg.cdi,
+    cdb.businessDays,
   );
+  const diff = Math.abs(cdb.netGain - lci.netGain);
+  const winner = cdb.netGain >= lci.netGain ? "CDB" : "LCI/LCA";
 
   return (
     <Card className="p-4">
@@ -145,35 +152,74 @@ export function RendaFixaCard({
 
       <div className="my-4 border-t border-neutral-100 dark:border-neutral-800" />
 
-      <div className="grid items-end gap-4 sm:grid-cols-[1fr_1fr_2fr]">
-        <Field label="Taxa (% do CDI)">
-          <Input
-            type="number"
-            step="0.1"
-            min={0}
-            value={cdiPct}
-            onChange={(e) => setCdiPct(e.target.value)}
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Option
+          label="CDB"
+          note={`IR ${pct(cdb.taxRate * 100)}%`}
+          pct={cdbPct}
+          onPct={setCdbPct}
+          result={cdb}
+          best={winner === "CDB"}
+        />
+        <div className="sm:border-l sm:border-neutral-100 sm:pl-6 sm:dark:border-neutral-800">
+          <Option
+            label="LCI/LCA"
+            note="Isento"
+            pct={lciPct}
+            onPct={setLciPct}
+            result={lci}
+            best={winner === "LCI/LCA"}
           />
-        </Field>
-        <Field label="Tipo">
-          <Select value={kind} onChange={(e) => setKind(e.target.value as InvestKind)}>
-            <option value="cdb">CDB (IR regressivo)</option>
-            <option value="lci_lca">LCI/LCA (isento)</option>
-          </Select>
-        </Field>
-        {/* O resultado encosta na borda direita do card: é o que se lê primeiro. */}
-        <div className="pb-1 text-right">
-          <p className="text-3xl font-semibold tabular-nums">{brl(r.net)}</p>
-          <p className="mt-0.5 text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
-            + {brl(r.netGain)} líquido
-          </p>
-          <p className="mt-0.5 text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-            {r.netCdiPct.toFixed(1)}% do CDI líquido
-            {r.taxRate > 0 && ` · IR ${(r.taxRate * 100).toFixed(1)}%`}
-          </p>
         </div>
       </div>
+
+      <div className="mt-4 border-t border-neutral-100 pt-3 text-sm font-medium dark:border-neutral-800">
+        {winner} rende {brl(diff)} a mais. CDB {cdbPct}% empata com LCI{" "}
+        {pct(breakEven)}%.
+      </div>
     </Card>
+  );
+}
+
+// Uma das duas colunas: a taxa digitada e o que ela rende.
+function Option({
+  label,
+  note,
+  pct,
+  onPct,
+  result,
+  best,
+}: {
+  label: string;
+  note: string;
+  pct: string;
+  onPct: (v: string) => void;
+  result: Yield;
+  best: boolean;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">{label}</span>
+        {best && <Badge tone="win">✓ Melhor</Badge>}
+      </div>
+      <Field label="Taxa (% do CDI)">
+        <Input
+          type="number"
+          step="0.1"
+          min={0}
+          value={pct}
+          onChange={(e) => onPct(e.target.value)}
+        />
+      </Field>
+      <p className="mt-3 text-2xl font-semibold tabular-nums">{brl(result.net)}</p>
+      <p className="mt-0.5 text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
+        + {brl(result.netGain)} líquido
+      </p>
+      <p className="mt-0.5 text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+        {note}
+      </p>
+    </div>
   );
 }
 
@@ -194,65 +240,6 @@ function Badge({
     <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${styles}`}>
       {children}
     </span>
-  );
-}
-
-/**
- * One investment with its simulated outcome. `best` paints the winner; the
- * action slot is what the Investimentos page uses for editar/excluir.
- */
-export function ResultCard({
-  result,
-  best = false,
-  actions,
-}: {
-  result: SimResult;
-  best?: boolean;
-  actions?: React.ReactNode;
-}) {
-  const { investment: inv } = result;
-  return (
-    <Card
-      className={`flex flex-col p-4 ${
-        best ? "ring-2 ring-emerald-500 dark:ring-emerald-500" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-semibold leading-tight">{inv.name}</h3>
-          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-            {kindLabel(inv.kind)} · {inv.cdi_pct}% do CDI
-          </p>
-        </div>
-        {best && <Badge tone="win">✓ Melhor</Badge>}
-      </div>
-
-      <div className="mt-4 space-y-1">
-        <p className="text-2xl font-semibold tabular-nums">{brl(result.net)}</p>
-        <p className="text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
-          + {brl(result.netGain)} líquido
-        </p>
-        <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-          {result.netCdiPct.toFixed(1)}% do CDI líquido
-          {result.taxRate > 0 && ` · IR ${(result.taxRate * 100).toFixed(1)}%`}
-        </p>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-1.5">
-        <Badge>{liquidityLabel(inv.liquidity)}</Badge>
-        {inv.maturity && <Badge>Vence {fmtDate(inv.maturity)}</Badge>}
-        {result.maturesEarly && (
-          <Badge tone="warn">Vence antes: reinveste à mesma taxa</Badge>
-        )}
-        {result.lockedPastHorizon && <Badge tone="warn">Sem resgate no prazo</Badge>}
-      </div>
-
-      {actions && (
-        <div className="mt-4 flex justify-end gap-1 border-t border-neutral-100 pt-3 dark:border-neutral-800">
-          {actions}
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -298,8 +285,8 @@ export function PositionCard({
           {inv.applied_at && ` em ${fmtDate(inv.applied_at)}`}
         </p>
         <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-          {p.today.netCdiPct.toFixed(1)}% do CDI líquido
-          {p.today.taxRate > 0 && ` · IR ${(p.today.taxRate * 100).toFixed(1)}%`}
+          {pct(p.today.netCdiPct)}% do CDI líquido
+          {p.today.taxRate > 0 && ` · IR ${pct(p.today.taxRate * 100)}%`}
         </p>
         {p.atMaturity && !p.matured && (
           <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">

@@ -106,8 +106,10 @@ scheduled, paid, payment_type auto|manual),
 `tax_periods` (year, quarter, snapshot fields, locked), `settings` (singleton, tax params).
 
 Pessoa Física (suffix `_invest`, see **Modalidades** below):
-`investments_invest` (name, kind cdb|lci_lca, cdi_pct, liquidity daily|maturity, maturity),
-`settings_invest` (singleton: cdi_rate, amount, months).
+`investments_invest` (name, broker, kind cdb|lci_lca, cdi_pct, amount, applied_at,
+liquidity daily|maturity, maturity), `settings_invest` (singleton: cdi_rate, amount,
+months). Note the two `amount`s are different things: on a position it is what was
+really applied, on the settings it is the simulation's hypothetical "valor a investir".
 
 Platform is free text sourced from the `platforms` collection (not a fixed enum), so
 new platforms can be added in Config.
@@ -127,47 +129,57 @@ component in `App.tsx`: an inline ternary in the `element` prop would be frozen 
 whatever the mode was when `App` last rendered). PF has no month/year filter, so
 the sidebar hides those selectors there.
 
-### Pessoa Física: simulador de renda fixa
+### Pessoa Física: simulação e carteira
 
-It is a **calculator, not a portfolio**: real positions and balances stay in the
-broker's app. `investments_invest` holds the *terms* of a product (taxa, liquidez,
-vencimento), never an amount invested; the amount is the single global "valor a
-investir" applied to all of them, so the cards answer "which of these is better",
-and the "Cálculo rápido" on the Simulação page answers "R$ X a 102% do CDI em 24
-meses rende quanto" without cadastrar anything.
+Two pages, and the split between them is the point:
 
-Two pages: **Simulação** (`/pf`) and **Investimentos** (`/pf/investimentos`). The
-inputs (CDI % a.a., valor, prazo 1..36 meses) are edited only on Simulação and
-persisted in the `settings_invest` singleton with a debounce (the prazo slider
-fires on every pixel); Investimentos reads them and states them as a subtitle, so
-every input field on that page lives inside its modal. Results are always sorted
-best-to-worst by **net gain in BRL**, and the "✓ Melhor" badge is just the top of
-that sort.
+- **Simulação** (`/pf`) is **hypothetical and read-only**: no real data (that is
+  what the broker's app is for), and it creates or edits nothing, not even an
+  empty-state "adicionar". It is split into one section per asset class, today
+  only **"Renda fixa"**, and each class is **one card** (`RendaFixaCard`): its
+  parameters (CDI % a.a., valor a investir, prazo 1..36 meses) on top, a hairline,
+  then a taxa typed on the spot with its result flush right. That answers "R$ X a
+  102% do CDI em 24 meses rende quanto" without registering anything. Nothing sits
+  outside a section, parameters included, since the next classes bring their own.
+  Below it, the registered titles are compared under that same hypothetical amount
+  and prazo (verdict sentence, cards, bar chart of net gains), which is a fair
+  rate-vs-rate comparison precisely because the amount is the same for all.
+- **Investimentos** (`/pf/investimentos`) is the **real carteira**: the titles
+  actually bought. Each record carries `amount` (valor aplicado), `applied_at` and
+  `broker` ("XP"), so the card answers **"quanto tenho hoje"**: the net value of a
+  resgate right now, IR already taken off by the bracket of the calendar days since
+  the application, with the maturity projection as a secondary line and the
+  portfolio total in the subtitle. Every input field on this page lives inside its
+  modal; only the CDI comes from Simulação.
 
-**Simulação is read-only**: it creates and edits nothing, not even an empty-state
-"adicionar" (cadastro lives on Investimentos). It is split into one section per
-asset class, today only **"Renda fixa"**, and each class is **one card**
-(`RendaFixaCard`): the parameters on top, a hairline, then a taxa typed on the spot
-with its result beside it. Nothing sits outside a section, parameters included,
-since the next classes will bring their own. Other classes come in as siblings of
-that heading, which is why the two pages stay separate.
+The parameters are persisted in the `settings_invest` singleton with a debounce
+(the prazo slider fires on every pixel).
+
+Ordering differs per page, on purpose. Simulação sorts by **net gain in BRL** (same
+amount for everyone, so reais are comparable); Investimentos sorts by **% líquido
+do CDI**, because real positions have different sizes and reais would just crown
+the biggest application. The "✓ Melhor" badge is the top of whichever sort applies.
 
 The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
-the browser rather than in Go because every slider move recomputes it. Rules:
+the browser rather than in Go because every slider move recomputes it. `yieldOf` is
+the core both pages share: an amount, a taxa and a number of calendar days in, a
+gross/net/IR breakdown out. Rules:
 
 - **Capitalização em dias úteis (252/ano):** taxa diária = `(1+CDI)^(1/252)-1`, e o
   rendimento é `(1 + taxa_diária × %CDI)^dias_úteis`.
-- **Prazo:** os dias corridos vêm do calendário (hoje + N meses, preservando o fim
-  de mês); os **dias úteis** são derivados por `dias_corridos × 252/365`, o que
-  embute os feriados sem precisar de uma tabela deles (12 meses = 365 dias = 252
-  dias úteis, exatamente).
+- **Prazo:** os dias corridos vêm do calendário (na Simulação, hoje + N meses,
+  preservando o fim de mês; na carteira, da data da aplicação); os **dias úteis**
+  são derivados por `dias_corridos × 252/365`, o que embute os feriados sem
+  precisar de uma tabela deles (12 meses = 365 dias = 252 dias úteis, exatamente).
 - **IR regressivo** por **dias corridos**, sobre o rendimento: 22,5% até 180, 20%
   até 360, 17,5% até 720, 15% acima. Só para **CDB**; **LCI/LCA são isentas**.
 - **% líquido do CDI** = ganho líquido ÷ ganho de um título a 100% do CDI no mesmo
   prazo. É o número que compara isento com tributado.
-- **Avisos** (badges, nunca parágrafos): vencimento antes do fim do prazo simulado
-  marca "vence antes: reinveste à mesma taxa"; liquidez só no vencimento com
-  vencimento depois do prazo marca "sem resgate no prazo".
+- **Um título vencido para de render:** a contagem de dias trava no vencimento, e o
+  card ganha o badge "Vencido".
+- **Avisos** (badges, nunca parágrafos): na Simulação, vencimento antes do fim do
+  prazo simulado marca "vence antes: reinveste à mesma taxa", e liquidez só no
+  vencimento com vencimento depois do prazo marca "sem resgate no prazo".
 
 UI text on the PF side is deliberately terse: labels of at most 5 words, one badge
 per fact, a single verdict sentence ("X rende R$ N a mais que o 2º lugar em M

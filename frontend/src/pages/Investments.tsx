@@ -2,27 +2,32 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { brl, fromDateInput, toDateInput } from "../lib/pb";
-import { simulate, type Investment } from "../lib/invest";
-import { NoInvestments, ResultCard, useSimConfig } from "../components/invest";
+import { portfolioTotals, positions, type Investment } from "../lib/invest";
+import { NoInvestments, PositionCard, useSimConfig } from "../components/invest";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = {
   name: "",
+  broker: "",
   kind: "cdb",
   cdi_pct: "100",
+  amount: "",
+  applied_at: "",
   liquidity: "maturity",
   maturity: "",
 };
 
-// Onde o dinheiro foi (ou seria) aplicado: cadastro dos títulos, já com o
-// resultado de cada um sob a configuração global, do melhor para o pior.
+// A carteira de verdade: os títulos que foram comprados, cada um com o que foi
+// aplicado e quando. O card responde "quanto tenho hoje" (líquido, IR já
+// descontado pela faixa dos dias corridos). A Simulação, ao lado, é a tela
+// hipotética; aqui nada é hipotético e todo campo de entrada mora no modal.
 export default function Investments() {
   const { list, create, update, remove } = useCollection<Investment>(
     "investments_invest",
     { sort: "name" },
   );
-  // Read-only here: os parâmetros são editados na Simulação. Esta tela é só
-  // cadastro, e todo campo de entrada dela vive dentro do modal.
+  // Só o CDI importa aqui: o valor e o prazo de cada posição são dela, não da
+  // simulação. O CDI é editado na Simulação e lido nesta tela.
   const { cfg } = useSimConfig();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Investment | null>(null);
@@ -48,8 +53,11 @@ export default function Investments() {
     setEditing(inv);
     setForm({
       name: inv.name,
+      broker: inv.broker ?? "",
       kind: inv.kind,
       cdi_pct: String(inv.cdi_pct),
+      amount: inv.amount ? String(inv.amount) : "",
+      applied_at: toDateInput(inv.applied_at),
       liquidity: inv.liquidity ?? "maturity",
       maturity: toDateInput(inv.maturity),
     });
@@ -60,8 +68,11 @@ export default function Investments() {
     e.preventDefault();
     const data = {
       name: form.name,
+      broker: form.broker,
       kind: form.kind,
       cdi_pct: Number(form.cdi_pct),
+      amount: form.amount ? Number(form.amount) : 0,
+      applied_at: form.applied_at ? fromDateInput(form.applied_at) : "",
       liquidity: form.liquidity,
       maturity: form.maturity ? fromDateInput(form.maturity) : "",
     };
@@ -70,37 +81,45 @@ export default function Investments() {
     setOpen(false);
   }
 
-  const results = simulate(list.data ?? [], cfg);
+  const carteira = positions(list.data ?? [], cfg.cdi);
+  const total = portfolioTotals(carteira);
+  // Corretoras já usadas, para sugerir no formulário.
+  const brokers = [
+    ...new Set((list.data ?? []).map((i) => i.broker?.trim()).filter(Boolean)),
+  ].sort() as string[];
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Investimentos</h1>
-          {/* De onde vêm os números dos cards, sem repetir os controles. */}
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            CDI {cfg.cdi.toLocaleString("pt-BR")}% · {brl(cfg.amount)} ·{" "}
-            {cfg.months} {cfg.months === 1 ? "mês" : "meses"}
+          {/* A carteira em uma linha, e o CDI que a atualiza. */}
+          <p className="mt-1 text-sm tabular-nums text-neutral-500 dark:text-neutral-400">
+            {brl(total.net)} hoje · {brl(total.amount)} aplicados ·{" "}
+            <span className="text-emerald-600 dark:text-emerald-400">
+              + {brl(total.netGain)}
+            </span>{" "}
+            · CDI {cfg.cdi.toLocaleString("pt-BR")}%
           </p>
         </div>
         <Button onClick={openNew}>+ Adicionar</Button>
       </div>
 
-      {results.length === 0 ? (
+      {carteira.length === 0 ? (
         <NoInvestments onAdd={openNew} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {results.map((r, i) => (
-            <ResultCard
-              key={r.investment.id}
-              result={r}
+          {carteira.map((p, i) => (
+            <PositionCard
+              key={p.investment.id}
+              position={p}
               best={i === 0}
               actions={
                 <>
-                  <Button variant="ghost" onClick={() => openEdit(r.investment)}>
+                  <Button variant="ghost" onClick={() => openEdit(p.investment)}>
                     Editar
                   </Button>
-                  <Button variant="danger" onClick={() => remove.mutate(r.investment.id)}>
+                  <Button variant="danger" onClick={() => remove.mutate(p.investment.id)}>
                     Excluir
                   </Button>
                 </>
@@ -124,6 +143,19 @@ export default function Investments() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </Field>
+            <Field label="Corretora">
+              <Input
+                list="invest-brokers"
+                placeholder="XP"
+                value={form.broker}
+                onChange={(e) => setForm({ ...form, broker: e.target.value })}
+              />
+            </Field>
+            <datalist id="invest-brokers">
+              {brokers.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
             <Field label="Tipo">
               <Select
                 value={form.kind}
@@ -141,6 +173,24 @@ export default function Investments() {
                 required
                 value={form.cdi_pct}
                 onChange={(e) => setForm({ ...form, cdi_pct: e.target.value })}
+              />
+            </Field>
+            <Field label="Valor aplicado (R$)">
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                required
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              />
+            </Field>
+            <Field label="Data da aplicação">
+              <Input
+                type="date"
+                required
+                value={form.applied_at}
+                onChange={(e) => setForm({ ...form, applied_at: e.target.value })}
               />
             </Field>
             <Field label="Liquidez">

@@ -20,6 +20,12 @@ export interface Investment extends BaseRecord {
   liquidity?: Liquidity;
   /** PocketBase datetime; empty means no maturity (e.g. pure daily liquidity). */
   maturity?: string;
+  /** Valor aplicado de verdade, R$ (a aba Investimentos são posições reais). */
+  amount?: number;
+  /** Data da aplicação, PocketBase datetime. */
+  applied_at?: string;
+  /** Corretora onde o título está ("XP"), texto livre. */
+  broker?: string;
   notes?: string;
 }
 
@@ -113,17 +119,54 @@ export const dailyCdi = (cdiAnnualPct: number) =>
 export const growthFactor = (cdiAnnualPct: number, cdiPct: number, businessDays: number) =>
   Math.pow(1 + dailyCdi(cdiAnnualPct) * fromPct(cdiPct), businessDays);
 
-export interface SimResult {
-  investment: Investment;
+/** Dias úteis equivalentes a um número de dias corridos. */
+export const businessDaysIn = (calendarDays: number) =>
+  Math.max(
+    0,
+    Math.round((calendarDays * BUSINESS_DAYS_PER_YEAR) / CALENDAR_DAYS_PER_YEAR),
+  );
+
+/** Rendimento de um valor por um período. É o núcleo de tudo nesta tela. */
+export interface Yield {
+  businessDays: number;
   grossGain: number;
-  tax: number;
   /** Alíquota de IR aplicada (0 para LCI/LCA). */
   taxRate: number;
-  /** Valor final líquido. */
+  tax: number;
+  /** Valor final líquido (aplicado + ganho líquido). */
   net: number;
   netGain: number;
   /** Quanto o líquido equivale em % do CDI (100% do CDI bruto = 100). */
   netCdiPct: number;
+}
+
+export function yieldOf(
+  amount: number,
+  cdiAnnualPct: number,
+  cdiPct: number,
+  kind: InvestKind,
+  calendarDays: number,
+): Yield {
+  const businessDays = businessDaysIn(calendarDays);
+  const grossGain = amount * (growthFactor(cdiAnnualPct, cdiPct, businessDays) - 1);
+  // LCI/LCA são isentas; CDB paga IR sobre o rendimento, na faixa do prazo.
+  const taxRate = kind === "cdb" ? irRate(calendarDays) : 0;
+  const tax = grossGain * taxRate;
+  const netGain = grossGain - tax;
+  const cdi100Gain = amount * (growthFactor(cdiAnnualPct, 100, businessDays) - 1);
+  return {
+    businessDays,
+    grossGain,
+    taxRate,
+    tax,
+    net: amount + netGain,
+    netGain,
+    netCdiPct: cdi100Gain > 0 ? (netGain / cdi100Gain) * 100 : 0,
+  };
+}
+
+export interface SimResult extends Yield {
+  investment: Investment;
   /** Vence antes do fim da simulação: assume reinvestimento à mesma taxa. */
   maturesEarly: boolean;
   /** Sem liquidez diária e vencendo depois do prazo: não dá para resgatar. */
@@ -131,25 +174,13 @@ export interface SimResult {
 }
 
 export function simulateOne(inv: Investment, cfg: SimConfig, h: Horizon): SimResult {
-  const grossGain = cfg.amount * (growthFactor(cfg.cdi, inv.cdi_pct, h.businessDays) - 1);
-  // LCI/LCA são isentas; CDB paga IR sobre o rendimento, na faixa do prazo.
-  const taxRate = inv.kind === "cdb" ? irRate(h.calendarDays) : 0;
-  const tax = grossGain * taxRate;
-  const netGain = grossGain - tax;
-  const cdi100Gain = cfg.amount * (growthFactor(cfg.cdi, 100, h.businessDays) - 1);
-
-  const maturity = inv.maturity ? new Date(`${inv.maturity.slice(0, 10)}T12:00:00`) : null;
+  const y = yieldOf(cfg.amount, cfg.cdi, inv.cdi_pct, inv.kind, h.calendarDays);
+  const maturity = maturityOf(inv);
   return {
     investment: inv,
-    grossGain,
-    tax,
-    taxRate,
-    net: cfg.amount + netGain,
-    netGain,
-    netCdiPct: cdi100Gain > 0 ? (netGain / cdi100Gain) * 100 : 0,
+    ...y,
     maturesEarly: !!maturity && maturity < h.end,
-    lockedPastHorizon:
-      inv.liquidity === "maturity" && !!maturity && maturity > h.end,
+    lockedPastHorizon: inv.liquidity === "maturity" && !!maturity && maturity > h.end,
   };
 }
 
@@ -157,4 +188,96 @@ export function simulateOne(inv: Investment, cfg: SimConfig, h: Horizon): SimRes
 export function simulate(list: Investment[], cfg: SimConfig): SimResult[] {
   const h = horizon(cfg.months);
   return list.map((inv) => simulateOne(inv, cfg, h)).sort((a, b) => b.netGain - a.netGain);
+}
+
+// ---------------------------------------------------------------------------
+// Posições reais (aba Investimentos)
+// ---------------------------------------------------------------------------
+
+const parseDate = (pb?: string) =>
+  pb ? new Date(`${pb.slice(0, 10)}T12:00:00`) : null;
+
+export const maturityOf = (inv: Investment) => parseDate(inv.maturity);
+
+const daysBetween = (from: Date, to: Date) =>
+  Math.max(0, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+
+/** O que um título comprado de verdade vale hoje, e o que valerá no vencimento. */
+export interface Position {
+  investment: Investment;
+  /** Valor aplicado. Zero quando o registro ainda não tem o campo preenchido. */
+  amount: number;
+  /** Dias corridos rendendo. Para no vencimento se o título já venceu. */
+  days: number;
+  /** Resgate hoje: já com o IR da faixa dos `days`. */
+  today: Yield;
+  /** Projeção líquida no vencimento; null se o título não tem vencimento. */
+  atMaturity: (Yield & { days: number }) | null;
+  matured: boolean;
+  /** Aplicação futura (data ainda por vir) ou sem data: nada rendeu ainda. */
+  pending: boolean;
+}
+
+export function positionOf(
+  inv: Investment,
+  cdiAnnualPct: number,
+  now: Date = new Date(),
+): Position {
+  const amount = inv.amount ?? 0;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const applied = parseDate(inv.applied_at);
+  const maturity = maturityOf(inv);
+
+  // Um título vencido para de render: a contagem trava no vencimento.
+  const until = maturity && maturity < today ? maturity : today;
+  const days = applied ? daysBetween(applied, until) : 0;
+
+  return {
+    investment: inv,
+    amount,
+    days,
+    today: yieldOf(amount, cdiAnnualPct, inv.cdi_pct, inv.kind, days),
+    atMaturity:
+      applied && maturity
+        ? {
+            days: daysBetween(applied, maturity),
+            ...yieldOf(
+              amount,
+              cdiAnnualPct,
+              inv.cdi_pct,
+              inv.kind,
+              daysBetween(applied, maturity),
+            ),
+          }
+        : null,
+    matured: !!maturity && maturity < today,
+    pending: !applied || days === 0,
+  };
+}
+
+/**
+ * A carteira toda, do melhor para o pior. O critério é o **% líquido do CDI**,
+ * não o ganho em reais: as posições têm tamanhos diferentes, então reais
+ * premiariam a maior aplicação em vez do melhor papel.
+ */
+export function positions(
+  list: Investment[],
+  cdiAnnualPct: number,
+  now?: Date,
+): Position[] {
+  return list
+    .map((inv) => positionOf(inv, cdiAnnualPct, now))
+    .sort((a, b) => b.today.netCdiPct - a.today.netCdiPct);
+}
+
+/** Somatório da carteira: aplicado, valor hoje e ganho líquido. */
+export function portfolioTotals(list: Position[]) {
+  return list.reduce(
+    (acc, p) => ({
+      amount: acc.amount + p.amount,
+      net: acc.net + p.today.net,
+      netGain: acc.netGain + p.today.netGain,
+    }),
+    { amount: 0, net: 0, netGain: 0 },
+  );
 }

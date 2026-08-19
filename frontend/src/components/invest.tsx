@@ -9,9 +9,11 @@ import {
   liquidityLabel,
   simulateOne,
   type InvestKind,
+  type Position,
   type SimConfig,
   type SimResult,
 } from "../lib/invest";
+import { fmtDate } from "../lib/pb";
 import { Button, Card, Field, Input, Select } from "./ui";
 
 // Shared pieces of the Pessoa Física module: the global simulation inputs
@@ -238,11 +240,79 @@ export function ResultCard({
 
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
         <Badge>{liquidityLabel(inv.liquidity)}</Badge>
-        {inv.maturity && <Badge>Vence {inv.maturity.slice(0, 10).split("-").reverse().join("/")}</Badge>}
+        {inv.maturity && <Badge>Vence {fmtDate(inv.maturity)}</Badge>}
         {result.maturesEarly && (
           <Badge tone="warn">Vence antes: reinveste à mesma taxa</Badge>
         )}
         {result.lockedPastHorizon && <Badge tone="warn">Sem resgate no prazo</Badge>}
+      </div>
+
+      {actions && (
+        <div className="mt-4 flex justify-end gap-1 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+          {actions}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Uma posição real: o destaque é **quanto tenho hoje**, líquido, ou seja o que
+ * cairia na conta num resgate agora (o IR já descontado pela faixa dos dias
+ * corridos desde a aplicação). O vencimento vem como linha secundária.
+ */
+export function PositionCard({
+  position: p,
+  best = false,
+  actions,
+}: {
+  position: Position;
+  best?: boolean;
+  actions?: React.ReactNode;
+}) {
+  const inv = p.investment;
+  return (
+    <Card
+      className={`flex flex-col p-4 ${
+        best ? "ring-2 ring-emerald-500 dark:ring-emerald-500" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="font-semibold leading-tight">{inv.name}</h3>
+          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+            {inv.broker ? `${inv.broker} · ` : ""}
+            {kindLabel(inv.kind)} · {inv.cdi_pct}% do CDI
+          </p>
+        </div>
+        {best && <Badge tone="win">✓ Melhor</Badge>}
+      </div>
+
+      <div className="mt-4 space-y-1">
+        <p className="text-2xl font-semibold tabular-nums">{brl(p.today.net)}</p>
+        <p className="text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
+          + {brl(p.today.netGain)} líquido
+        </p>
+        <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+          {brl(p.amount)} aplicados
+          {inv.applied_at && ` em ${fmtDate(inv.applied_at)}`}
+        </p>
+        <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+          {p.today.netCdiPct.toFixed(1)}% do CDI líquido
+          {p.today.taxRate > 0 && ` · IR ${(p.today.taxRate * 100).toFixed(1)}%`}
+        </p>
+        {p.atMaturity && !p.matured && (
+          <p className="text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+            No vencimento: {brl(p.atMaturity.net)}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        <Badge>{liquidityLabel(inv.liquidity)}</Badge>
+        {inv.maturity && <Badge>Vence {fmtDate(inv.maturity)}</Badge>}
+        {p.matured && <Badge tone="warn">Vencido</Badge>}
+        {p.pending && <Badge tone="warn">Sem data de aplicação</Badge>}
       </div>
 
       {actions && (

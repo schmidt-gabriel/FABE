@@ -1,20 +1,15 @@
-import { useNavigate } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { brl } from "../lib/pb";
 import { horizon, simulate, type Investment } from "../lib/invest";
-import {
-  NoInvestments,
-  QuickCalc,
-  ResultCard,
-  SimControls,
-  useSimConfig,
-} from "../components/invest";
+import { QuickCalc, ResultCard, SimControls, useSimConfig } from "../components/invest";
 import { BarChart } from "../components/charts";
 
-// Simulação: os três parâmetros globais no topo, um card por investimento
-// ordenado do melhor para o pior, e o gráfico dos ganhos líquidos.
+// Simulação: só de leitura. Os três parâmetros globais valem para a tela
+// toda; abaixo deles vem uma seção por classe de ativo, hoje só "Renda fixa"
+// (cálculo rápido de uma taxa qualquer + comparação dos títulos cadastrados,
+// do melhor para o pior). Cadastrar é assunto da tela de Investimentos: aqui
+// nada é criado nem editado.
 export default function InvestSimulation() {
-  const navigate = useNavigate();
   const { cfg, setCfg } = useSimConfig();
   const { list } = useCollection<Investment>("investments_invest", { sort: "name" });
 
@@ -33,11 +28,12 @@ export default function InvestSimulation() {
       </div>
 
       <SimControls cfg={cfg} onChange={setCfg} />
+
+      {/* Uma seção por classe de ativo: as próximas entram como irmãs desta. */}
+      <h2 className="pt-2 text-lg font-semibold">Renda fixa</h2>
       <QuickCalc cfg={cfg} />
 
-      {results.length === 0 ? (
-        <NoInvestments onAdd={() => navigate("/pf/investimentos?new=1")} />
-      ) : (
+      {results.length > 0 && (
         <>
           {/* Um veredito, uma frase: quem ganha e por quanto. */}
           <p className="text-sm font-medium">

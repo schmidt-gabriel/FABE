@@ -1,7 +1,7 @@
 import { useCollection } from "../lib/useCollection";
 import { brl } from "../lib/pb";
 import { horizon, simulate, type Investment } from "../lib/invest";
-import { QuickCalc, ResultCard, SimControls, useSimConfig } from "../components/invest";
+import { RendaFixaCard, ResultCard, useSimConfig } from "../components/invest";
 import { BarChart } from "../components/charts";
 
 // Simulação: só de leitura, dividida em uma seção por classe de ativo (hoje
@@ -30,8 +30,7 @@ export default function InvestSimulation() {
           cada uma com os seus próprios parâmetros. Nada fica solto fora de
           uma seção. */}
       <h2 className="text-lg font-semibold">Renda fixa</h2>
-      <SimControls cfg={cfg} onChange={setCfg} />
-      <QuickCalc cfg={cfg} />
+      <RendaFixaCard cfg={cfg} onChange={setCfg} />
 
       {results.length > 0 && (
         <>

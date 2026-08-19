@@ -70,7 +70,51 @@ export function useSimConfig() {
   return { cfg: cfg ?? DEFAULT_CONFIG, setCfg, ready: cfg !== null };
 }
 
-/** Configuração global: CDI, valor a investir e prazo. */
+// CDI, valor a investir e prazo. Compartilhados pelo card da Simulação e pela
+// tela de Investimentos, por isso vivem soltos aqui.
+function ConfigFields({
+  cfg,
+  onChange,
+}: {
+  cfg: SimConfig;
+  onChange: (c: SimConfig) => void;
+}) {
+  return (
+    <>
+      <Field label="CDI (% a.a.)">
+        <Input
+          type="number"
+          step="0.01"
+          min={0}
+          value={cfg.cdi}
+          onChange={(e) => onChange({ ...cfg, cdi: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label="Valor a investir">
+        <Input
+          type="number"
+          step="100"
+          min={0}
+          value={cfg.amount}
+          onChange={(e) => onChange({ ...cfg, amount: Number(e.target.value) })}
+        />
+      </Field>
+      <Field label={`Prazo: ${cfg.months} ${cfg.months === 1 ? "mês" : "meses"}`}>
+        <input
+          type="range"
+          min={1}
+          max={MAX_MONTHS}
+          step={1}
+          value={cfg.months}
+          onChange={(e) => onChange({ ...cfg, months: Number(e.target.value) })}
+          className="h-9 w-full accent-neutral-900 dark:accent-neutral-100"
+        />
+      </Field>
+    </>
+  );
+}
+
+/** Os parâmetros sozinhos, para a tela de Investimentos. */
 export function SimControls({
   cfg,
   onChange,
@@ -81,58 +125,42 @@ export function SimControls({
   return (
     <Card className="p-4">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="CDI (% a.a.)">
-          <Input
-            type="number"
-            step="0.01"
-            min={0}
-            value={cfg.cdi}
-            onChange={(e) => onChange({ ...cfg, cdi: Number(e.target.value) })}
-          />
-        </Field>
-        <Field label="Valor a investir">
-          <Input
-            type="number"
-            step="100"
-            min={0}
-            value={cfg.amount}
-            onChange={(e) => onChange({ ...cfg, amount: Number(e.target.value) })}
-          />
-        </Field>
-        <Field label={`Prazo: ${cfg.months} ${cfg.months === 1 ? "mês" : "meses"}`}>
-          <input
-            type="range"
-            min={1}
-            max={MAX_MONTHS}
-            step={1}
-            value={cfg.months}
-            onChange={(e) => onChange({ ...cfg, months: Number(e.target.value) })}
-            className="h-9 w-full accent-neutral-900 dark:accent-neutral-100"
-          />
-        </Field>
+        <ConfigFields cfg={cfg} onChange={onChange} />
       </div>
     </Card>
   );
 }
 
 /**
- * Cálculo rápido: uma taxa digitada na hora, sem cadastrar nada. Responde
- * direto "valor X a 102% do CDI em 2 anos rende quanto", que é o uso mais
- * comum da tela; a lista cadastrada abaixo é só para comparar.
+ * A seção Renda fixa da Simulação, em um card só: os parâmetros em cima e,
+ * abaixo da linha, uma taxa digitada na hora com o resultado ao lado. Responde
+ * direto "valor X a 102% do CDI em 2 anos rende quanto" sem cadastrar nada; a
+ * lista cadastrada, quando existe, aparece embaixo só para comparar.
  */
-export function QuickCalc({ cfg }: { cfg: SimConfig }) {
+export function RendaFixaCard({
+  cfg,
+  onChange,
+}: {
+  cfg: SimConfig;
+  onChange: (c: SimConfig) => void;
+}) {
   const [cdiPct, setCdiPct] = useState("102");
   const [kind, setKind] = useState<InvestKind>("cdb");
 
-  const h = horizon(cfg.months);
   const r = simulateOne(
     { id: "quick", name: "", kind, cdi_pct: Number(cdiPct) || 0, liquidity: "daily" },
     cfg,
-    h,
+    horizon(cfg.months),
   );
 
   return (
     <Card className="p-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ConfigFields cfg={cfg} onChange={onChange} />
+      </div>
+
+      <div className="my-4 border-t border-neutral-100 dark:border-neutral-800" />
+
       <div className="grid items-end gap-4 sm:grid-cols-[1fr_1fr_2fr]">
         <Field label="Taxa (% do CDI)">
           <Input

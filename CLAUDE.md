@@ -143,10 +143,11 @@ pixel). Results are always sorted best-to-worst by net gain.
 
 **Simulação is read-only**: it creates and edits nothing, not even an empty-state
 "adicionar" (cadastro lives on Investimentos). It is split into one section per
-asset class, today only **"Renda fixa"**, and nothing sits outside a section: the
-inputs card belongs to its class, since the next classes will bring their own.
-Other classes come in as siblings of that heading, which is why the two pages stay
-separate.
+asset class, today only **"Renda fixa"**, and each class is **one card**
+(`RendaFixaCard`): the parameters on top, a hairline, then a taxa typed on the spot
+with its result beside it. Nothing sits outside a section, parameters included,
+since the next classes will bring their own. Other classes come in as siblings of
+that heading, which is why the two pages stay separate.
 
 The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
 the browser rather than in Go because every slider move recomputes it. Rules:

@@ -4,6 +4,7 @@ import { pb } from "../lib/pb";
 import { useCollection } from "../lib/useCollection";
 import { MONTHS, useYear, yearOptions } from "../lib/year";
 import { applyTheme, getInitialTheme, type Theme } from "../lib/theme";
+import { modeHome, modeOf, saveMode, type Mode } from "../lib/mode";
 
 // Pages driven by the sidebar month filter, separated from the annual ones.
 const navMonthly = [
@@ -15,6 +16,13 @@ const navMonthly = [
 const navAnnual = [
   { to: "/lucros", label: "Distribuição de Lucros", newTo: "/lucros?new=1" },
   { to: "/impostos", label: "Impostos" },
+];
+
+// Pessoa Física: a separate app sharing the same DB (collections suffixed
+// `_invest`). It has no month/year filter, so its nav is a single list.
+const navPF = [
+  { to: "/pf", label: "Simulação", end: true },
+  { to: "/pf/investimentos", label: "Investimentos", newTo: "/pf/investimentos?new=1" },
 ];
 
 type NavItem = { to: string; label: string; end?: boolean; newTo?: string };
@@ -59,6 +67,42 @@ function NavRow({ item }: { item: NavItem }) {
   );
 }
 
+// PJ / PF switch, at the very top of the page. It just navigates: the mode is
+// read back from the route (see lib/mode.ts).
+function ModeSwitch({ mode }: { mode: Mode }) {
+  const navigate = useNavigate();
+  const options: { key: Mode; label: string }[] = [
+    { key: "pj", label: "CNPJ" },
+    { key: "pf", label: "Pessoa Física" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="Modalidade"
+      className="flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800"
+    >
+      {options.map((o) => (
+        <button
+          key={o.key}
+          role="tab"
+          aria-selected={mode === o.key}
+          onClick={() => {
+            saveMode(o.key);
+            navigate(modeHome(o.key));
+          }}
+          className={`flex-1 whitespace-nowrap rounded-md px-1.5 py-1.5 text-[11px] font-medium transition-colors ${
+            mode === o.key
+              ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100"
+              : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme());
   function toggle() {
@@ -91,6 +135,10 @@ function ThemeToggle() {
 
 export default function Layout() {
   const { year, setYear, month, setMonth } = useYear();
+  // Which side of the app is on screen. Derived from the route, and remembered
+  // so a reload lands on the same side.
+  const mode = modeOf(useLocation().pathname);
+  useEffect(() => saveMode(mode), [mode]);
   // Same pattern as the Overview dropdown: don't offer future months in the
   // current year.
   const now = new Date();
@@ -111,9 +159,14 @@ export default function Layout() {
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="flex">
         <aside className="sticky top-0 flex h-screen w-56 flex-col border-r border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="px-2 py-3">
-            <h1 className="text-lg font-semibold">Finance · CNPJ</h1>
-            {cnpj && (
+          <div className="px-1 pb-2 pt-1">
+            <ModeSwitch mode={mode} />
+          </div>
+          <div className="px-2 pb-3 pt-1">
+            <h1 className="text-lg font-semibold">
+              {mode === "pf" ? "Finance · PF" : "Finance · CNPJ"}
+            </h1>
+            {mode === "pj" && cnpj && (
               <p className="text-xs text-neutral-500 dark:text-neutral-400">{cnpj}</p>
             )}
             <p className="text-xs text-neutral-400 dark:text-neutral-500">
@@ -121,6 +174,9 @@ export default function Layout() {
             </p>
           </div>
           <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
+          {/* The month/year filter only drives the CNPJ pages. */}
+          {mode === "pj" && (
+          <>
           <div className="px-2 pb-1">
             <label className="mb-1 block text-xs font-medium text-neutral-400 dark:text-neutral-500">
               Ano
@@ -158,14 +214,22 @@ export default function Layout() {
             </select>
           </div>
           <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
+          </>
+          )}
           <nav className="flex-1 space-y-1">
-            {navMonthly.map((item) => (
-              <NavRow key={item.to} item={item} />
-            ))}
-            <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
-            {navAnnual.map((item) => (
-              <NavRow key={item.to} item={item} />
-            ))}
+            {mode === "pf" ? (
+              navPF.map((item) => <NavRow key={item.to} item={item} />)
+            ) : (
+              <>
+                {navMonthly.map((item) => (
+                  <NavRow key={item.to} item={item} />
+                ))}
+                <div className="my-2 border-t border-neutral-200 dark:border-neutral-800" />
+                {navAnnual.map((item) => (
+                  <NavRow key={item.to} item={item} />
+                ))}
+              </>
+            )}
           </nav>
 
           <div className="space-y-1 border-t border-neutral-200 pt-2 dark:border-neutral-800">

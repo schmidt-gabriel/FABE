@@ -25,6 +25,9 @@ var exportable = []string{
 	"profit_distributions",
 	"tax_periods",
 	"settings",
+	// Pessoa Física module (see migrations/1751920000_invest.go).
+	"investments_invest",
+	"settings_invest",
 }
 
 // registerExportRoutes wires the data-export endpoints.

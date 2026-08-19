@@ -37,11 +37,14 @@ backend/
       autoregister.go           # auto-debited recurring services post their expense
 frontend/
   src/pages/                    # Dashboard, Remittances, Imports, Expenses,
-                                # ProfitDistributions, Taxes, Config, Export, Login
-  src/lib/                      # pb (client + formatters), useCollection, types, theme
+                                # ProfitDistributions, Taxes, Config, Export, Login,
+                                # InvestSimulation + Investments (Pessoa Física)
+  src/lib/                      # pb (client + formatters), useCollection, types, theme,
+                                # mode (PJ/PF switch), invest (renda fixa calculator)
   src/components/               # ui primitives, Layout,
                                 # OverviewSections (year strip + month cards of
-                                # the landing page), charts (SVG chart kit)
+                                # the landing page), charts (SVG chart kit),
+                                # invest (PF controls + result card)
 docker-compose.yml, Makefile      # data backup lives OUTSIDE the repo (see below)
 ```
 
@@ -102,8 +105,62 @@ scheduled, paid, payment_type auto|manual),
 `profit_distributions` (month, amount, irrf),
 `tax_periods` (year, quarter, snapshot fields, locked), `settings` (singleton, tax params).
 
+Pessoa Física (suffix `_invest`, see **Modalidades** below):
+`investments_invest` (name, kind cdb|lci_lca, cdi_pct, liquidity daily|maturity, maturity),
+`settings_invest` (singleton: cdi_rate, amount, months).
+
 Platform is free text sourced from the `platforms` collection (not a fixed enum), so
 new platforms can be added in Config.
+
+## Modalidades (CNPJ / Pessoa Física)
+
+The app has two sides, swapped by the switch at the top of the sidebar: the CNPJ
+one (everything under `/`) and **Pessoa Física** (everything under `/pf`). They
+share the database; the PF collections carry the **`_invest`** suffix so the two
+never mix in exports, backups or the admin UI. Keep that suffix for anything new
+on the PF side.
+
+The mode is **derived from the route** (`lib/mode.ts`), never held in state, so the
+two can never disagree; localStorage only remembers which side to land on after a
+reload (the `/` route bounces to `/pf` when PF was the side in use, via the `Home`
+component in `App.tsx`: an inline ternary in the `element` prop would be frozen at
+whatever the mode was when `App` last rendered). PF has no month/year filter, so
+the sidebar hides those selectors there.
+
+### Pessoa Física: simulador de renda fixa
+
+It is a **calculator, not a portfolio**: real positions and balances stay in the
+broker's app. `investments_invest` holds the *terms* of a product (taxa, liquidez,
+vencimento), never an amount invested; the amount is the single global "valor a
+investir" applied to all of them, so the cards answer "which of these is better",
+and the "Cálculo rápido" on the Simulação page answers "R$ X a 102% do CDI em 24
+meses rende quanto" without cadastrar anything.
+
+Two pages: **Simulação** (`/pf`) and **Investimentos** (`/pf/investimentos`). Both
+render the same global inputs (CDI % a.a., valor, prazo 1..36 meses), persisted in
+the `settings_invest` singleton with a debounce (the prazo slider fires on every
+pixel). Results are always sorted best-to-worst by net gain.
+
+The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
+the browser rather than in Go because every slider move recomputes it. Rules:
+
+- **Capitalização em dias úteis (252/ano):** taxa diária = `(1+CDI)^(1/252)-1`, e o
+  rendimento é `(1 + taxa_diária × %CDI)^dias_úteis`.
+- **Prazo:** os dias corridos vêm do calendário (hoje + N meses, preservando o fim
+  de mês); os **dias úteis** são derivados por `dias_corridos × 252/365`, o que
+  embute os feriados sem precisar de uma tabela deles (12 meses = 365 dias = 252
+  dias úteis, exatamente).
+- **IR regressivo** por **dias corridos**, sobre o rendimento: 22,5% até 180, 20%
+  até 360, 17,5% até 720, 15% acima. Só para **CDB**; **LCI/LCA são isentas**.
+- **% líquido do CDI** = ganho líquido ÷ ganho de um título a 100% do CDI no mesmo
+  prazo. É o número que compara isento com tributado.
+- **Avisos** (badges, nunca parágrafos): vencimento antes do fim do prazo simulado
+  marca "vence antes: reinveste à mesma taxa"; liquidez só no vencimento com
+  vencimento depois do prazo marca "sem resgate no prazo".
+
+UI text on the PF side is deliberately terse: labels of at most 5 words, one badge
+per fact, a single verdict sentence ("X rende R$ N a mais que o 2º lugar em M
+meses"). No tooltips, no educational paragraphs.
 
 ## Domain rules (important)
 

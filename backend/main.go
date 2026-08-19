@@ -39,6 +39,7 @@ func main() {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		ensureMasterUser(app)
 		ensureSettings(app)
+		ensureInvestSettings(app)
 		return e.Next()
 	})
 
@@ -128,4 +129,33 @@ func ensureSettings(app core.App) {
 		return
 	}
 	log.Printf("settings seeded with default tax params")
+}
+
+// ensureInvestSettings seeds the singleton settings_invest record (Pessoa
+// Física / investimentos) with the defaults the simulator starts from, so the
+// page has a record to edit on a fresh DB. Never touches an existing one.
+func ensureInvestSettings(app core.App) {
+	records, err := app.FindAllRecords("settings_invest")
+	if err != nil {
+		log.Printf("settings_invest: %v", err)
+		return
+	}
+	if len(records) > 0 {
+		return
+	}
+
+	col, err := app.FindCollectionByNameOrId("settings_invest")
+	if err != nil {
+		log.Printf("settings_invest: %v", err)
+		return
+	}
+	rec := core.NewRecord(col)
+	rec.Set("cdi_rate", 13.90) // % a.a.
+	rec.Set("amount", 30000.0)
+	rec.Set("months", 12)
+	if err := app.Save(rec); err != nil {
+		log.Printf("settings_invest: %v", err)
+		return
+	}
+	log.Printf("settings_invest seeded with default simulation params")
 }

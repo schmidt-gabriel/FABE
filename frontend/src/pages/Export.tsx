@@ -13,6 +13,7 @@ const COLLECTIONS = [
   { name: "platforms", label: "Plataformas" },
   { name: "recurring_services", label: "Serviços recorrentes" },
   { name: "settings", label: "Configurações" },
+  { name: "investments_invest", label: "Investimentos (PF)" },
 ];
 
 async function download(path: string, filename: string) {

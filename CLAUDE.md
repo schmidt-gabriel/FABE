@@ -261,8 +261,12 @@ through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
 - **One-off taxes** (TFE, IPTU, DARF avulso, ...) are plain expenses, not a separate
   collection: create them in Despesas, as "a pagar" when still due. The old
   `other_taxes` collection was dropped (its records were converted to expenses by
-  `migrations/1751890000_drop_other_taxes.go`). The Impostos page only covers the
-  quarterly IRPJ/CSLL assessment.
+  `migrations/1751890000_drop_other_taxes.go`). Besides the quarterly IRPJ/CSLL
+  assessment, the Impostos page carries an **"IRRF sobre lucros"** table, one row per
+  month (that is how the withholding is charged and paid). It only **reads** the
+  `irrf` stored on the distributions, never recomputes it: one number, one owner.
+  It carries no due date, because the recolhimento deadline for DARF 1841 is not
+  something to guess from memory; add it as a constant once the real DARF confirms it.
 
 ## Conventions
 

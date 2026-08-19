@@ -177,7 +177,8 @@ export function RendaFixaCard({
             <option value="lci_lca">LCI/LCA (isento)</option>
           </Select>
         </Field>
-        <div className="pb-1">
+        {/* O resultado encosta na borda direita do card: é o que se lê primeiro. */}
+        <div className="pb-1 text-right">
           <p className="text-3xl font-semibold tabular-nums">{brl(r.net)}</p>
           <p className="mt-0.5 text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
             + {brl(r.netGain)} líquido

@@ -13,10 +13,10 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/hook"
 
-	"financeapp/backend/internal/api"
+	"fabe/backend/internal/api"
 
 	// auto-register Go migrations (collections + seed data)
-	_ "financeapp/backend/migrations"
+	_ "fabe/backend/migrations"
 )
 
 func main() {

@@ -5,8 +5,8 @@ on:
     branches: [ "main" ]
 
 env:
-  # ghcr requires lowercase image names (the repo is "financeApp").
-  IMAGE_BASE: ghcr.io/schmidt-gabriel/financeapp
+  # ghcr requires lowercase image names (the repo is "FABE").
+  IMAGE_BASE: ghcr.io/schmidt-gabriel/fabe
 
 jobs:
   build:

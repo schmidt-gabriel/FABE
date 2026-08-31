@@ -1,4 +1,4 @@
-module financeapp/backend
+module fabe/backend
 
 go 1.26.4
 

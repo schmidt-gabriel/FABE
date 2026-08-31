@@ -1,10 +1,12 @@
-# Finance · CNPJ
+# FABE
 
-Financial control for the company (Lucro Presumido, exported software services):
-USD remittances received, conversion/import to BRL, expenses, quarterly IRPJ/CSLL
-assessment, and profit distribution.
+**Financial app for Brazilian Dev exporters.** Financial control for a Brazilian
+company under Lucro Presumido that exports software services: USD remittances
+received, conversion/import to BRL, expenses, quarterly IRPJ/CSLL assessment, and
+profit distribution.
 
-Single-user app (owner only).
+Single-user app (owner only). The UI still calls itself "Finance · CNPJ" /
+"Finance · PF", which is the product name on screen.
 
 ## Stack
 
@@ -60,32 +62,6 @@ make down         # stop the stack
 ```
 
 Then open the app at http://localhost:5173 and log in (see **Login** above).
-
-### Kubernetes
-
-Images are built and pushed to `ghcr.io/schmidt-gabriel/financeapp-{backend,frontend}`
-by CI on every push to `main`. Everything is in a single manifest, [`k8s.yaml`](k8s.yaml).
-
-```bash
-# 1. Edit k8s.yaml first:
-#    - financeapp-master Secret: MASTER_EMAIL / MASTER_PASSWORD
-#    - PVC size / storageClassName
-#    - Ingress host + the frontend's ALLOWED_HOSTS env (must match the host)
-#    - if the ghcr packages are private, create a pull secret (see comments)
-
-kubectl apply -f k8s.yaml
-
-# 2. Wait for the rollout
-kubectl -n financeapp rollout status deploy/financeapp-backend
-kubectl -n financeapp rollout status deploy/financeapp-frontend
-
-# 3. Access via the Ingress host, or port-forward for a quick check
-kubectl -n financeapp port-forward svc/financeapp-frontend 5173:5173
-```
-
-The backend keeps its SQLite data on a `ReadWriteOnce` PVC and runs single-replica
-(`Recreate` strategy). Only the frontend is exposed; it proxies `/api` and `/_` to
-the backend in-cluster.
 
 ### Local (without Docker)
 

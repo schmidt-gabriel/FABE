@@ -6,7 +6,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 
-	"financeapp/backend/internal/tax"
+	"fabe/backend/internal/tax"
 )
 
 // quarterOut is a quarter result enriched with its lock status and due date.

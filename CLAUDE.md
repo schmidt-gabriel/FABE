@@ -4,9 +4,12 @@ Guidance for working in this repository.
 
 ## What this is
 
+**FABE** ("Financial app for Brazilian Dev exporters"), the repository name.
 Single-user financial control app for a Brazilian PJ that exports
 software/programming services to US clients, receives in USD, brings the money
 into BRL, and pays taxes under **Lucro Presumido**. Used only by the owner.
+On screen it still calls itself "Finance · CNPJ" / "Finance · PF": that is the
+product name in the UI, and the sidebar has no room for the long one.
 
 ## Stack
 

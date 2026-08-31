@@ -38,13 +38,13 @@ backend/
 frontend/
   src/pages/                    # Dashboard, Remittances, Imports, Expenses,
                                 # ProfitDistributions, Taxes, Config, Export, Login,
-                                # InvestSimulation + Investments (Pessoa Física)
+                                # Investments (Pessoa Física)
   src/lib/                      # pb (client + formatters), useCollection, types, theme,
                                 # mode (PJ/PF switch), invest (renda fixa calculator)
   src/components/               # ui primitives, Layout,
                                 # OverviewSections (year strip + month cards of
                                 # the landing page), charts (SVG chart kit),
-                                # invest (PF controls + result card)
+                                # invest (PF: CDI hook + position card)
 docker-compose.yml, Makefile      # data backup lives OUTSIDE the repo (see below)
 ```
 
@@ -107,9 +107,10 @@ scheduled, paid, payment_type auto|manual),
 
 Pessoa Física (suffix `_invest`, see **Modalidades** below):
 `investments_invest` (name, broker, kind cdb|lci_lca, cdi_pct, amount, applied_at,
-liquidity daily|maturity|market, maturity), `settings_invest` (singleton: cdi_rate, amount,
-months). Note the two `amount`s are different things: on a position it is what was
-really applied, on the settings it is the simulation's hypothetical "valor a investir".
+liquidity daily|maturity|market, maturity), `settings_invest` (singleton: cdi_rate).
+The settings singleton used to carry the simulation's `amount` and `months` as well;
+both were dropped with the Simulação page by
+`migrations/1751950000_invest_drop_simulation.go`.
 
 Platform is free text sourced from the `platforms` collection (not a fixed enum), so
 new platforms can be added in Config.
@@ -129,65 +130,56 @@ component in `App.tsx`: an inline ternary in the `element` prop would be frozen 
 whatever the mode was when `App` last rendered). PF has no month/year filter, so
 the sidebar hides those selectors there.
 
-### Pessoa Física: simulação e carteira
+### Pessoa Física: a carteira
 
-Two pages, and the split between them is the point:
+One page, **Investimentos** (`/pf`), and it is the **real carteira**: the titles
+actually bought. Each record carries `amount` (valor aplicado), `applied_at` and
+`broker` ("XP"), so the card answers **"quanto tenho hoje"**: the net value of a
+resgate right now, IR already taken off by the bracket of the calendar days since
+the application, with the maturity projection as a secondary line and the portfolio
+total in the subtitle. Every input field of a title lives inside its modal; the
+**CDI** is the exception, since it indexes the whole carteira: it sits in the header
+beside "+ Adicionar" and is persisted in the `settings_invest` singleton with a
+debounce.
 
-- **Simulação** (`/pf`) is **hypothetical and read-only**: no real data at all (not
-  even the registered carteira, which would only muddy it), nothing created or
-  edited. The question it answers is **"CDB ou LCI?"**, so it is a single card per
-  asset class (today only **"Renda fixa"**, `RendaFixaCard`): the parameters (CDI %
-  a.a., valor a investir, prazo 1..36 meses) on top, a hairline, then the two
-  options side by side with the same valor and prazo and only the taxas differing,
-  and nothing is prefilled (an example rate there reads as a result, so a column
-  shows no numbers until its taxa is typed). The closing line carries the verdict
-  plus **the taxa isenta that ties with the CDB** (`equivalentTaxFreePct`), which is the number that
-  actually decides: an LCI above it wins, below it loses. Nothing sits outside a
-  section, parameters included, since the next classes bring their own.
-- **Investimentos** (`/pf/investimentos`) is the **real carteira**: the titles
-  actually bought. Each record carries `amount` (valor aplicado), `applied_at` and
-  `broker` ("XP"), so the card answers **"quanto tenho hoje"**: the net value of a
-  resgate right now, IR already taken off by the bracket of the calendar days since
-  the application, with the maturity projection as a secondary line and the
-  portfolio total in the subtitle. Every input field on this page lives inside its
-  modal; only the CDI comes from Simulação.
+There used to be a second page, **Simulação** (`/pf`), a hypothetical "CDB ou LCI?"
+comparator with its own valor/prazo and the tie-rate (`equivalentTaxFreePct`). It
+was removed along with everything that only served it: the page, `RendaFixaCard`,
+the `SimConfig`/`horizon` helpers and the two settings fields.
 
-The parameters are persisted in the `settings_invest` singleton with a debounce
-(the prazo slider fires on every pixel).
+The card shows, under "quanto tenho hoje", **the taxa as it was typed** in the form
+(`cdi_pct`, "98% do CDI") plus the IR bracket. It deliberately does not show the
+ganho líquido in reais nor the **% líquido do CDI**: both read as `0` on a position
+applied today, which is exactly when the card is looked at.
 
-Investimentos sorts by **% líquido do CDI**: real positions have different sizes,
-so ordering by reais would just crown the biggest application. The order is the
-whole statement, there is no "melhor" badge on a card. That ratio is deliberately **not** shown on Simulação beside
-the tie-rate: the two measure different things (share of the CDI's gain vs the
-equivalent compounding rate) and reading them side by side only confuses.
+Investimentos still **sorts** by that % líquido do CDI (`netCdiPct`): real positions
+have different sizes, so ordering by reais would just crown the biggest application,
+and the tax-adjusted ratio is the only fair comparison between a CDB and an LCI. The
+order is the whole statement, there is no "melhor" badge on a card.
 
 The engine is `frontend/src/lib/invest.ts`, pure and free of React/IO. It runs in
-the browser rather than in Go because every slider move recomputes it. `yieldOf` is
-the core both pages share: an amount, a taxa and a number of calendar days in, a
-gross/net/IR breakdown out. Rules:
+the browser rather than in Go because the CDI recomputes the whole carteira on every
+keystroke. `yieldOf` is the core: an amount, a taxa and a number of calendar days in,
+a gross/net/IR breakdown out. Rules:
 
 - **Capitalização em dias úteis (252/ano):** taxa diária = `(1+CDI)^(1/252)-1`, e o
   rendimento é `(1 + taxa_diária × %CDI)^dias_úteis`.
-- **Prazo:** os dias corridos vêm do calendário (na Simulação, hoje + N meses,
-  preservando o fim de mês; na carteira, da data da aplicação); os **dias úteis**
-  são derivados por `dias_corridos × 252/365`, o que embute os feriados sem
-  precisar de uma tabela deles (12 meses = 365 dias = 252 dias úteis, exatamente).
+- **Prazo:** os dias corridos vêm do calendário, contados da data da aplicação; os
+  **dias úteis** são derivados por `dias_corridos × 252/365`, o que embute os
+  feriados sem precisar de uma tabela deles (12 meses = 365 dias = 252 dias úteis,
+  exatamente).
 - **IR regressivo** por **dias corridos**, sobre o rendimento: 22,5% até 180, 20%
   até 360, 17,5% até 720, 15% acima. Só para **CDB**; **LCI/LCA são isentas**.
 - **% líquido do CDI** = ganho líquido ÷ ganho de um título a 100% do CDI no mesmo
-  prazo. Serve para ranquear posições de tamanhos diferentes na carteira.
-- **Taxa isenta equivalente** = a taxa, em % do CDI, que rende sozinha o mesmo que
-  um líquido já tributado: `((1 + ganho/valor)^(1/dias_úteis) - 1) / taxa_diária`.
-  É o que decide CDB contra LCI.
+  prazo. Não é exibido; serve para ranquear posições de tamanhos diferentes.
 - **Um título vencido para de render:** a contagem de dias trava no vencimento, e o
   card ganha o badge "Vencido".
-- **Avisos** (badges, nunca parágrafos): na carteira, um título já vencido marca
-  "Vencido" e um sem data de aplicação marca "Sem data de aplicação".
+- **Avisos** (badges, nunca parágrafos): um título já vencido marca "Vencido" e um
+  sem data de aplicação marca "Sem data de aplicação".
 
 UI text on the PF side is deliberately terse: labels of at most 5 words, one badge
-per fact, a single verdict sentence ("LCI/LCA rende R$ 364,01 a mais. CDB 102%
-empata com LCI 88,3%."). No tooltips, no educational paragraphs. Percentages go
-through `pct()` in `lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
+per fact. No tooltips, no educational paragraphs. Percentages go through `pct()` in
+`lib/pb.ts` so they read in pt-BR ("88,3", not "88.3").
 
 ## Domain rules (important)
 

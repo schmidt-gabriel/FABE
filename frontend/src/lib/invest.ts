@@ -1,7 +1,7 @@
 // Calculadora de renda fixa (módulo Pessoa Física).
 //
-// Pure functions, no React, no I/O: the whole simulation is a function of the
-// three global inputs (CDI, valor, prazo) and the list of investments.
+// Pure functions, no React, no I/O: a carteira é uma função do CDI e da lista
+// de investimentos.
 //
 // Convention followed everywhere here: percentages arrive the way the user
 // types them (13.9 = 13,9% a.a., 98 = 98% do CDI) and are turned into
@@ -29,18 +29,8 @@ export interface Investment extends BaseRecord {
   notes?: string;
 }
 
-/** Os parâmetros da simulação: hipotéticos, nada aqui vem da carteira real. */
-export interface SimConfig {
-  /** CDI atual, % a.a. */
-  cdi: number;
-  /** Valor a investir, R$. */
-  amount: number;
-  /** Prazo da simulação, meses. */
-  months: number;
-}
-
-export const DEFAULT_CONFIG: SimConfig = { cdi: 13.9, amount: 30000, months: 12 };
-export const MAX_MONTHS = 36;
+/** CDI usado enquanto o singleton `settings_invest` não tem um valor. */
+export const DEFAULT_CDI = 13.9;
 
 export const kindLabel = (k: InvestKind) => (k === "cdb" ? "CDB" : "LCI/LCA");
 export const liquidityLabel = (l?: Liquidity) =>
@@ -55,41 +45,6 @@ const fromPct = (v: number) => v / 100;
 /** Dias úteis por ano usados na capitalização do CDI (padrão B3). */
 export const BUSINESS_DAYS_PER_YEAR = 252;
 const CALENDAR_DAYS_PER_YEAR = 365;
-
-// Somar meses preservando o fim de mês (31/01 + 1 mês = 28/02, não 03/03).
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date.getFullYear(), date.getMonth() + months, 1);
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(date.getDate(), lastDay));
-  return d;
-}
-
-export interface Horizon {
-  start: Date;
-  end: Date;
-  /** Dias corridos: é o que define a faixa de IR. */
-  calendarDays: number;
-  /** Dias úteis: é o que capitaliza o CDI. */
-  businessDays: number;
-}
-
-// Dias úteis são derivados dos corridos pela razão 252/365 em vez de contados
-// no calendário: assim os feriados entram na conta sem precisar de uma tabela
-// de feriados (12 meses = 365 dias = 252 dias úteis, exatamente).
-export function horizon(months: number, from: Date = new Date()): Horizon {
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = addMonths(start, months);
-  const calendarDays = Math.round((end.getTime() - start.getTime()) / 86_400_000);
-  return {
-    start,
-    end,
-    calendarDays,
-    businessDays: Math.max(
-      1,
-      Math.round((calendarDays * BUSINESS_DAYS_PER_YEAR) / CALENDAR_DAYS_PER_YEAR),
-    ),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // IR regressivo (renda fixa), por dias corridos da aplicação
@@ -119,23 +74,6 @@ export const dailyCdi = (cdiAnnualPct: number) =>
  */
 export const growthFactor = (cdiAnnualPct: number, cdiPct: number, businessDays: number) =>
   Math.pow(1 + dailyCdi(cdiAnnualPct) * fromPct(cdiPct), businessDays);
-
-/**
- * A taxa isenta que empata com um rendimento líquido: quanto uma LCI/LCA
- * precisa pagar, em % do CDI, para render o mesmo que este valor líquido.
- * É o número que decide entre um CDB e uma LCI.
- */
-export function equivalentTaxFreePct(
-  netGain: number,
-  amount: number,
-  cdiAnnualPct: number,
-  businessDays: number,
-): number {
-  const daily = dailyCdi(cdiAnnualPct);
-  if (amount <= 0 || businessDays <= 0 || daily <= 0) return 0;
-  const factor = 1 + netGain / amount;
-  return ((Math.pow(factor, 1 / businessDays) - 1) / daily) * 100;
-}
 
 /** Dias úteis equivalentes a um número de dias corridos. */
 export const businessDaysIn = (calendarDays: number) =>

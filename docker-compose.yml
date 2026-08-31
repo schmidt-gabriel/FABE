@@ -1,3 +1,7 @@
+# Pinned so the project name (and with it the pb_data volume) does not follow
+# the checkout directory's name. Renaming the folder used to detach the data.
+name: fabe
+
 services:
   backend:
     build: ./backend

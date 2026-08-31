@@ -10,8 +10,9 @@ import (
 // two never get mixed in exports, backups or the admin UI.
 //
 //	investments_invest -> the fixed-income products being compared
-//	settings_invest    -> singleton with the global simulation inputs
-//	                      (CDI, valor a investir, prazo)
+//	settings_invest    -> singleton with the global inputs (CDI, and at the time
+//	                      also the simulation's valor/prazo, dropped later by
+//	                      1751950000_invest_drop_simulation.go)
 //
 // Rates are stored the way the UI shows them: `cdi_rate` and `cdi_pct` are
 // percentages (13.90 = 13,90% a.a., 98 = 98% do CDI), converted to fractions

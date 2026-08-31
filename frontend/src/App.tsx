@@ -12,7 +12,6 @@ import Imports from "./pages/Imports";
 import Expenses from "./pages/Expenses";
 import ProfitDistributions from "./pages/ProfitDistributions";
 import Config from "./pages/Config";
-import InvestSimulation from "./pages/InvestSimulation";
 import Investments from "./pages/Investments";
 
 // Landing route. The CNPJ Dashboard owns "/", so a reload while the Pessoa
@@ -43,9 +42,8 @@ export default function App() {
           <Route path="impostos" element={<Taxes />} />
           <Route path="config" element={<Config />} />
 
-          {/* Pessoa Física: simulador de renda fixa + cadastro dos títulos. */}
-          <Route path="pf" element={<InvestSimulation />} />
-          <Route path="pf/investimentos" element={<Investments />} />
+          {/* Pessoa Física: a carteira de renda fixa, página única. */}
+          <Route path="pf" element={<Investments />} />
         </Route>
       </Routes>
     </YearProvider>

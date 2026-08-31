@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useCollection } from "../lib/useCollection";
 import { brl, fromDateInput, toDateInput } from "../lib/pb";
 import { portfolioTotals, positions, type Investment } from "../lib/invest";
-import { NoInvestments, PositionCard, useSimConfig } from "../components/invest";
+import { NoInvestments, PositionCard, useCdi } from "../components/invest";
 import { Button, Field, Input, Modal, Select } from "../components/ui";
 
 const empty = {
@@ -17,18 +17,18 @@ const empty = {
   maturity: "",
 };
 
-// A carteira de verdade: os títulos que foram comprados, cada um com o que foi
-// aplicado e quando. O card responde "quanto tenho hoje" (líquido, IR já
-// descontado pela faixa dos dias corridos). A Simulação, ao lado, é a tela
-// hipotética; aqui nada é hipotético e todo campo de entrada mora no modal.
+// A carteira: os títulos que foram comprados, cada um com o que foi aplicado e
+// quando. O card responde "quanto tenho hoje" (líquido, IR já descontado pela
+// faixa dos dias corridos). Todo campo de entrada de um título mora no modal;
+// o CDI, que vale para a carteira toda, é o único que fica no cabeçalho.
 export default function Investments() {
   const { list, create, update, remove } = useCollection<Investment>(
     "investments_invest",
     { sort: "name" },
   );
-  // Só o CDI importa aqui: o valor e o prazo de cada posição são dela, não da
-  // simulação. O CDI é editado na Simulação e lido nesta tela.
-  const { cfg } = useSimConfig();
+  // O CDI vale para a carteira toda (é o indexador de todo título), então é o
+  // único parâmetro global: mora no cabeçalho e é guardado em settings_invest.
+  const { cdi, setCdi } = useCdi();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Investment | null>(null);
   const [form, setForm] = useState<Record<string, string>>(empty);
@@ -81,7 +81,7 @@ export default function Investments() {
     setOpen(false);
   }
 
-  const carteira = positions(list.data ?? [], cfg.cdi);
+  const carteira = positions(list.data ?? [], cdi);
   const total = portfolioTotals(carteira);
   // Corretoras já usadas, para sugerir no formulário.
   const brokers = [
@@ -93,16 +93,30 @@ export default function Investments() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Investimentos</h1>
-          {/* A carteira em uma linha, e o CDI que a atualiza. */}
+          {/* A carteira em uma linha. */}
           <p className="mt-1 text-sm tabular-nums text-neutral-500 dark:text-neutral-400">
             {brl(total.net)} hoje · {brl(total.amount)} aplicados ·{" "}
             <span className="text-emerald-600 dark:text-emerald-400">
               + {brl(total.netGain)}
-            </span>{" "}
-            · CDI {cfg.cdi.toLocaleString("pt-BR")}%
+            </span>
           </p>
         </div>
-        <Button onClick={openNew}>+ Adicionar</Button>
+        {/* O CDI ao lado do botão: um parâmetro só, editado onde é lido. */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm text-neutral-500 dark:text-neutral-400">
+            CDI (% a.a.)
+            <span className="w-24">
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                value={cdi}
+                onChange={(e) => setCdi(Number(e.target.value))}
+              />
+            </span>
+          </label>
+          <Button onClick={openNew}>+ Adicionar</Button>
+        </div>
       </div>
 
       {carteira.length === 0 ? (

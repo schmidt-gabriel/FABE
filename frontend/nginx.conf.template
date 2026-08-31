@@ -1,7 +1,7 @@
 # Serves the built SPA and proxies the PocketBase routes to the backend, so the
 # browser talks to a single origin. Mirrors the Vite dev proxy in vite.config.ts.
 #
-# ${BACKEND_URL} is substituted at container startup by the nginx image's
+# ${FABE_BACKEND_URL} is substituted at container startup by the nginx image's
 # envsubst entrypoint (see /docker-entrypoint.d/20-envsubst-on-templates.sh).
 server {
     listen 5173;
@@ -17,7 +17,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass ${BACKEND_URL};
+        proxy_pass ${FABE_BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -32,7 +32,7 @@ server {
 
     # PocketBase admin UI (/_/) and its assets.
     location /_/ {
-        proxy_pass ${BACKEND_URL};
+        proxy_pass ${FABE_BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

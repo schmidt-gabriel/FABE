@@ -12,8 +12,8 @@ services:
     # Optional master superuser: set both to auto-create/sync a login on
     # startup (skips the manual pbinstall step). Leave unset to disable.
     environment:
-      - MASTER_EMAIL=${MASTER_EMAIL:-}
-      - MASTER_PASSWORD=${MASTER_PASSWORD:-}
+      - FABE_MASTER_EMAIL=${FABE_MASTER_EMAIL:-}
+      - FABE_MASTER_PASSWORD=${FABE_MASTER_PASSWORD:-}
     restart: unless-stopped
 
   frontend:
@@ -26,7 +26,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - BACKEND_URL=http://backend:8090
+      - FABE_BACKEND_URL=http://backend:8090
     volumes:
       - ./frontend:/app
       - /app/node_modules

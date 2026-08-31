@@ -36,8 +36,8 @@ Single-user app (owner only). The UI still calls itself "Finance · CNPJ" /
 Single account: the app authenticates directly against PocketBase's superuser.
 There is no separate `users` collection. Create the login in any of these ways:
 
-- **Env vars (recommended for a fresh deploy):** set `MASTER_EMAIL` and
-  `MASTER_PASSWORD`. On every startup the backend upserts a superuser with those
+- **Env vars (recommended for a fresh deploy):** set `FABE_MASTER_EMAIL` and
+  `FABE_MASTER_PASSWORD`. On every startup the backend upserts a superuser with those
   credentials (password kept in sync), so you can log in right away.
 - **CLI:** `cd backend && go run . superuser upsert EMAIL PASS` (local), or
   `docker compose exec backend /app/fin superuser upsert EMAIL PASS` (Docker).
@@ -54,7 +54,7 @@ app UI.
 
 ```bash
 # optional: auto-create the login on startup
-export MASTER_EMAIL=you@example.com MASTER_PASSWORD=change-me
+export FABE_MASTER_EMAIL=you@example.com FABE_MASTER_PASSWORD=change-me
 
 make up           # docker compose up --build -d  (backend :8090, frontend :5173)
 make logs         # follow logs
@@ -72,7 +72,7 @@ make test         # tax engine tests
 ```
 
 Create the login with `make admin EMAIL=.. PASS=..`, or export
-`MASTER_EMAIL`/`MASTER_PASSWORD` before `make backend`.
+`FABE_MASTER_EMAIL`/`FABE_MASTER_PASSWORD` before `make backend`.
 
 ## Tax parameters
 

@@ -21,7 +21,7 @@ product name in the UI, and the sidebar has no room for the long one.
   `frontend/Dockerfile` is multi-stage: the default target is the production
   image (nginx serving the built SPA, ~78MB) and `--target dev` is the Vite dev
   server used by docker-compose. Both listen on 5173 and proxy `/api` and `/_`
-  to `$BACKEND_URL`, so the two are interchangeable. CI pushes the default
+  to `$FABE_BACKEND_URL`, so the two are interchangeable. CI pushes the default
   (nginx) target; the nginx proxy config lives in `frontend/nginx.conf.template`.
 
 ## Monorepo layout
@@ -67,7 +67,7 @@ That same email/password logs into both the admin (`:8090/_/`) and the app UI
 `Login.tsx`). There is no separate `users` account. CLI alternative:
 `docker compose exec backend /app/fin superuser upsert EMAIL PASS`.
 
-To skip that step entirely, set **`MASTER_EMAIL`** and **`MASTER_PASSWORD`** env
+To skip that step entirely, set **`FABE_MASTER_EMAIL`** and **`FABE_MASTER_PASSWORD`** env
 vars: on every startup `main.go` upserts a superuser with those credentials
 (password kept in sync). Handy for a fresh deploy; leave unset to disable.
 

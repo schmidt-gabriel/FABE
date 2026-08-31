@@ -33,8 +33,8 @@ func main() {
 	api.Register(app)
 
 	// Startup bootstrap, once the DB and migrations are ready (OnServe runs
-	// after bootstrap): the optional master superuser (MASTER_EMAIL +
-	// MASTER_PASSWORD) so a fresh deploy can log in without the pbinstall step,
+	// after bootstrap): the optional master superuser (FABE_MASTER_EMAIL +
+	// FABE_MASTER_PASSWORD) so a fresh deploy can log in without the pbinstall step,
 	// and a default settings record so /api/tax/* works before any import.
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		ensureMasterUser(app)
@@ -66,12 +66,12 @@ func publicDir() string {
 	return filepath.Join(filepath.Dir(os.Args[0]), "pb_public")
 }
 
-// ensureMasterUser upserts a superuser from MASTER_EMAIL/MASTER_PASSWORD when
+// ensureMasterUser upserts a superuser from FABE_MASTER_EMAIL/FABE_MASTER_PASSWORD when
 // both are set, keeping the password in sync on every startup. A no-op when
 // the vars are absent.
 func ensureMasterUser(app core.App) {
-	email := strings.TrimSpace(os.Getenv("MASTER_EMAIL"))
-	password := os.Getenv("MASTER_PASSWORD")
+	email := strings.TrimSpace(os.Getenv("FABE_MASTER_EMAIL"))
+	password := os.Getenv("FABE_MASTER_PASSWORD")
 	if email == "" || password == "" {
 		return
 	}
